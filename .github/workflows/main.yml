@@ -1,0 +1,179 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - cleanup
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up environment
+        run: echo "Setting up test environment"
+      - name: Run tests
+        run: echo "Running tests"
+
+  deploy:
+    if: github.event.inputs.action != 'cleanup'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Read configuration
+        id: config
+        run: |
+          CONFIG_FILE="config/project-config.json"
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "Error: Config file not found at $CONFIG_FILE"
+            exit 1
+          fi
+
+          PROJECT_NAME=$(jq -r '.projectName' $CONFIG_FILE)
+          VPC_ID=$(jq -r '.vpcId' $CONFIG_FILE)
+          SUBNET_IDS=$(jq -r '.subnetIds' $CONFIG_FILE)
+          AI_MODEL=$(jq -r '.aiModel' $CONFIG_FILE)
+
+          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+          echo "VPC_ID=$VPC_ID" >> $GITHUB_ENV
+          echo "SUBNET_IDS=$SUBNET_IDS" >> $GITHUB_ENV
+          echo "AI_MODEL=$AI_MODEL" >> $GITHUB_ENV
+      - name: Create template bucket
+        run: |
+            TIMESTAMP=$(date +%s)
+            # Convert project name to lowercase and replace invalid characters
+            PROJECT_NAME_LOWER=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]')
+            TEMPLATE_BUCKET="${PROJECT_NAME_LOWER}-templates-${TIMESTAMP}"
+            echo "TEMPLATE_BUCKET=$TEMPLATE_BUCKET" >> $GITHUB_ENV
+
+            echo "Creating bucket: $TEMPLATE_BUCKET"
+            aws s3 mb s3://$TEMPLATE_BUCKET
+
+      - name: Upload templates to S3
+        run: aws s3 sync infrastructure/cloudformation/templates/ s3://$TEMPLATE_BUCKET/templates/
+      - name: Create Lambda deployment package
+        run: |
+          cd src/lambda
+          zip -r lambdaAiHandler.zip lambdaAiHandler.py
+          PROJECT_NAME_LOWER=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]')
+          aws s3 mb s3://${PROJECT_NAME_LOWER}-dev-deployment || true
+          aws s3 cp lambdaAiHandler.zip s3://${PROJECT_NAME_LOWER}-dev-deployment/
+
+      - name: Deploy CloudFormation stack
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: ${{ env.PROJECT_NAME }}
+          template: infrastructure/cloudformation/main-template.yaml
+          parameter-overrides: >-
+            ProjectName=${{ env.PROJECT_NAME }},
+            Environment=dev,
+            VpcId=${{ env.VPC_ID }},
+            SubnetIds=${{ env.SUBNET_IDS }},
+            TemplateBucket=${{ env.TEMPLATE_BUCKET }},
+            AiModelId=${{ env.AI_MODEL }}
+          no-fail-on-empty-changeset: "1"
+          capabilities: "CAPABILITY_NAMED_IAM"
+
+      - name: Upload website files
+        run: |
+          BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name ${{ env.PROJECT_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text)
+          aws s3 sync src/website/ s3://$BUCKET_NAME/
+
+      - name: Get CloudFront URL
+        run: |
+          CF_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.PROJECT_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteUrl'].OutputValue" --output text)
+          echo "Your website is available at: https://$CF_URL"
+  cleanup:
+    if: github.event.inputs.action == 'cleanup'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Read configuration
+        id: config
+        run: |
+          CONFIG_FILE="config/project-config.json"
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "Error: Config file not found at $CONFIG_FILE"
+            exit 1
+          fi
+
+          PROJECT_NAME=$(jq -r '.projectName' $CONFIG_FILE)
+          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+
+      - name: Get bucket names
+        run: |
+          # Get the template bucket name
+          TEMPLATE_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ env.PROJECT_NAME }} --query "Stacks[0].Parameters[?ParameterKey=='TemplateBucket'].ParameterValue" --output text || echo "")
+          echo "TEMPLATE_BUCKET=$TEMPLATE_BUCKET" >> $GITHUB_ENV
+
+          # Get the website bucket name
+          WEBSITE_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ env.PROJECT_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text || echo "")
+          if [ -z "$WEBSITE_BUCKET" ]; then
+            WEBSITE_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ env.PROJECT_NAME }}-storage --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text || echo "")
+          fi
+          echo "WEBSITE_BUCKET=$WEBSITE_BUCKET" >> $GITHUB_ENV
+
+      - name: Empty S3 buckets
+        run: |
+          # Empty website bucket if it exists
+          if [ ! -z "${{ env.WEBSITE_BUCKET }}" ]; then
+            echo "Emptying website bucket: ${{ env.WEBSITE_BUCKET }}"
+            aws s3 rm s3://${{ env.WEBSITE_BUCKET }} --recursive
+          fi
+
+          # Empty template bucket if it exists
+          if [ ! -z "${{ env.TEMPLATE_BUCKET }}" ]; then
+            echo "Emptying template bucket: ${{ env.TEMPLATE_BUCKET }}"
+            aws s3 rm s3://${{ env.TEMPLATE_BUCKET }} --recursive
+          fi
+      - name: Delete CloudFormation stacks
+        run: |
+          # Delete main stack
+          echo "Deleting main stack: ${{ env.PROJECT_NAME }}"
+          aws cloudformation delete-stack --stack-name ${{ env.PROJECT_NAME }}
+
+          # Wait for main stack deletion
+          echo "Waiting for main stack deletion..."
+          aws cloudformation wait stack-delete-complete --stack-name ${{ env.PROJECT_NAME }} || true
+
+          # Check for any remaining nested stacks
+          NESTED_STACKS=("${{ env.PROJECT_NAME }}-cdn" "${{ env.PROJECT_NAME }}-api" "${{ env.PROJECT_NAME }}-compute" "${{ env.PROJECT_NAME }}-storage")
+
+          for stack in "${NESTED_STACKS[@]}"; do
+            if aws cloudformation describe-stacks --stack-name $stack 2>/dev/null; then
+              echo "Deleting nested stack: $stack"
+              aws cloudformation delete-stack --stack-name $stack
+              aws cloudformation wait stack-delete-complete --stack-name $stack || true
+            fi
+          done
+
+      - name: Delete template bucket
+        if: env.TEMPLATE_BUCKET != ''
+        run: |
+          echo "Deleting template bucket: ${{ env.TEMPLATE_BUCKET }}"
+          aws s3 rb s3://${{ env.TEMPLATE_BUCKET }} --force

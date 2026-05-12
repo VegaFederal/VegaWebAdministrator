@@ -1,0 +1,167 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: |
+        if [ -f package.json ]; then
+          npm ci
+        else
+          echo "No package.json found, skipping npm install"
+        fi
+    
+    - name: Run tests
+      run: |
+        if [ -f package.json ] && grep -q '"test"' package.json; then
+          npm test
+        else
+          echo "No tests to run"
+        fi
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: |
+        if [ -f package.json ]; then
+          npm ci
+        else
+          echo "No package.json found, skipping npm install"
+        fi
+    
+    - name: Lint code
+      run: |
+        if [ -f package.json ] && grep -q '"lint"' package.json; then
+          npm run lint
+        else
+          echo "No lint script found, skipping"
+        fi
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        ignore-unfixed: true
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  infrastructure-validation:
+    name: Validate Infrastructure
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Validate CloudFormation templates
+      run: |
+        if [ -d infrastructure/cloudformation ]; then
+          for template in infrastructure/cloudformation/*.yaml; do
+            if [ -f "$template" ]; then
+              echo "Validating $template"
+              aws cloudformation validate-template --template-body file://$template || exit 1
+            fi
+          done
+        else
+          echo "No CloudFormation templates found, skipping validation"
+        fi
+      env:
+        AWS_DEFAULT_REGION: us-east-1
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID || 'dummy' }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY || 'dummy' }}
+    
+    - name: Validate CDK
+      run: |
+        if [ -d infrastructure/cdk ]; then
+          cd infrastructure/cdk
+          npm ci
+          npm run build
+          npm run cdk synth
+        else
+          echo "No CDK project found, skipping validation"
+        fi
+    
+    - name: Validate Terraform
+      run: |
+        if [ -d infrastructure/terraform ]; then
+          cd infrastructure/terraform
+          terraform init -backend=false
+          terraform validate
+        else
+          echo "No Terraform project found, skipping validation"
+        fi
+
+  build:
+    name: Build
+    needs: [test, lint, security-scan, infrastructure-validation]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: |
+        if [ -f package.json ]; then
+          npm ci
+        else
+          echo "No package.json found, skipping npm install"
+        fi
+    
+    - name: Build
+      run: |
+        if [ -f package.json ] && grep -q '"build"' package.json; then
+          npm run build
+        else
+          echo "No build script found, skipping"
+        fi

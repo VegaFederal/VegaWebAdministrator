@@ -1,0 +1,120 @@
+name: Manual Infrastructure Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to destroy (dev/prod)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+      confirmation:
+        description: 'Type "DESTROY" to confirm destruction of resources'
+        required: true
+        type: string
+
+jobs:
+  validate-confirmation:
+    name: Validate Confirmation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation input
+        if: ${{ github.event.inputs.confirmation != 'DESTROY' }}
+        run: |
+          echo "Error: You must type 'DESTROY' exactly to confirm resource destruction"
+          exit 1
+
+  destroy-infrastructure:
+    name: Destroy Infrastructure
+    needs: validate-confirmation
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+    
+    - name: Read configuration
+      id: config
+      run: |
+        CONFIG_FILE="config/project-config.json"
+        if [ ! -f "$CONFIG_FILE" ]; then
+          echo "Error: Config file not found at $CONFIG_FILE"
+          exit 1
+        fi
+        
+        PROJECT_NAME=$(jq -r '.projectName' $CONFIG_FILE)
+        echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+    
+    - name: Get bucket names
+      run: |
+        # Get the template bucket name
+        TEMPLATE_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ env.PROJECT_NAME }} --query "Stacks[0].Parameters[?ParameterKey=='TemplateBucket'].ParameterValue" --output text || echo "")
+        echo "TEMPLATE_BUCKET=$TEMPLATE_BUCKET" >> $GITHUB_ENV
+        
+        # Get the website bucket name
+        WEBSITE_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ env.PROJECT_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text || echo "")
+        if [ -z "$WEBSITE_BUCKET" ]; then
+          WEBSITE_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ env.PROJECT_NAME }}-storage --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text || echo "")
+        fi
+        echo "WEBSITE_BUCKET=$WEBSITE_BUCKET" >> $GITHUB_ENV
+    
+    - name: Empty S3 buckets
+      run: |
+        # Empty website bucket if it exists
+        if [ ! -z "${{ env.WEBSITE_BUCKET }}" ]; then
+          echo "Emptying website bucket: ${{ env.WEBSITE_BUCKET }}"
+          aws s3 rm s3://${{ env.WEBSITE_BUCKET }} --recursive
+        fi
+        
+        # Empty template bucket if it exists
+        if [ ! -z "${{ env.TEMPLATE_BUCKET }}" ]; then
+          echo "Emptying template bucket: ${{ env.TEMPLATE_BUCKET }}"
+          aws s3 rm s3://${{ env.TEMPLATE_BUCKET }} --recursive
+        fi
+    
+    - name: Delete storage stack first
+      run: |
+        # Check if storage stack exists and delete it first
+        if aws cloudformation describe-stacks --stack-name ${{ env.PROJECT_NAME }}-storage 2>/dev/null; then
+          echo "Deleting storage stack: ${{ env.PROJECT_NAME }}-storage"
+          aws cloudformation delete-stack --stack-name ${{ env.PROJECT_NAME }}-storage
+          echo "Waiting for storage stack deletion..."
+          aws cloudformation wait stack-delete-complete --stack-name ${{ env.PROJECT_NAME }}-storage || true
+        fi
+    
+    - name: Delete remaining CloudFormation stacks
+      run: |
+        # Delete main stack
+        echo "Deleting main stack: ${{ env.PROJECT_NAME }}"
+        aws cloudformation delete-stack --stack-name ${{ env.PROJECT_NAME }}
+        
+        # Wait for main stack deletion
+        echo "Waiting for main stack deletion..."
+        aws cloudformation wait stack-delete-complete --stack-name ${{ env.PROJECT_NAME }} || true
+        
+        # Check for any remaining nested stacks
+        NESTED_STACKS=("${{ env.PROJECT_NAME }}-cdn" "${{ env.PROJECT_NAME }}-api" "${{ env.PROJECT_NAME }}-compute")
+        
+        for stack in "${NESTED_STACKS[@]}"; do
+          if aws cloudformation describe-stacks --stack-name $stack 2>/dev/null; then
+            echo "Deleting nested stack: $stack"
+            aws cloudformation delete-stack --stack-name $stack
+            aws cloudformation wait stack-delete-complete --stack-name $stack || true
+          fi
+        done
+    
+    - name: Delete template bucket
+      if: env.TEMPLATE_BUCKET != ''
+      run: |
+        echo "Deleting template bucket: ${{ env.TEMPLATE_BUCKET }}"
+        aws s3 rb s3://${{ env.TEMPLATE_BUCKET }} --force

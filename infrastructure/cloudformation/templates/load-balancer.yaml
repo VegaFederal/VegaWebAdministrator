@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Load Balancer resources for web application
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+    Description: The deployment environment
+  
+  VpcId:
+    Type: String
+    Description: ID of the existing company VPC
+  
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: Comma-delimited list of subnet IDs
+  
+  WebServerSecurityGroupId:
+    Type: String
+    Description: Security Group ID for web servers
+
+Resources:
+  # Example Application Load Balancer
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Subnets: !Ref SubnetIds
+      SecurityGroups:
+        - !Ref WebServerSecurityGroupId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-alb
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ALB Listener
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: "No target groups configured"
+            StatusCode: 200
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+Outputs:
+  LoadBalancerDnsName:
+    Description: DNS name of the Application Load Balancer
+    Value: !GetAtt ApplicationLoadBalancer.DNSName

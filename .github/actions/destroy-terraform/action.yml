@@ -1,0 +1,23 @@
+name: 'Destroy Terraform Resources'
+description: 'Destroys resources deployed with Terraform'
+
+inputs:
+  environment:
+    description: 'Environment to destroy (dev/prod)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Initialize Terraform
+      shell: bash
+      run: |
+        cd infrastructure/terraform
+        terraform init
+    
+    - name: Destroy Terraform Resources
+      shell: bash
+      run: |
+        cd infrastructure/terraform
+        echo "Destroying Terraform resources for ${{ inputs.environment }} environment"
+        terraform destroy -auto-approve -var="environment=${{ inputs.environment }}"

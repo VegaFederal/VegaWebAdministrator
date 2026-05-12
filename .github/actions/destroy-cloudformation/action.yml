@@ -1,0 +1,45 @@
+name: 'Destroy CloudFormation Resources'
+description: 'Destroys resources deployed with AWS CloudFormation'
+
+inputs:
+  environment:
+    description: 'Environment to destroy (dev/prod)'
+    required: true
+  repository:
+    description: 'GitHub repository name'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Delete CloudFormation Stack
+      shell: bash
+      run: |
+        REPO_NAME=${GITHUB_REPOSITORY#*/}
+        STACK_NAME=$REPO_NAME-${{ inputs.environment }}
+        
+        echo "Checking for nested CloudFormation structure..."
+        if [ -f infrastructure/cloudformation/main-template.yaml ]; then
+          echo "Found nested template structure. Destroying main stack: $STACK_NAME"
+          # When using nested stacks, we only need to delete the parent stack
+          aws cloudformation delete-stack --stack-name $STACK_NAME
+          echo "Initiated deletion of stack $STACK_NAME"
+          aws cloudformation wait stack-delete-complete --stack-name $STACK_NAME
+          echo "Stack $STACK_NAME deleted successfully"
+        elif [ -f infrastructure/cloudformation/example-template.yaml ] || [ -f infrastructure/cloudformation/template.yaml ]; then
+          # For single template structure
+          if [ -f infrastructure/cloudformation/template.yaml ]; then
+            TEMPLATE_FILE="template.yaml"
+          else
+            TEMPLATE_FILE="example-template.yaml"
+          fi
+          
+          echo "Found single template structure. Destroying stack: $STACK_NAME"
+          aws cloudformation delete-stack --stack-name $STACK_NAME
+          echo "Initiated deletion of stack $STACK_NAME"
+          aws cloudformation wait stack-delete-complete --stack-name $STACK_NAME
+          echo "Stack $STACK_NAME deleted successfully"
+        else
+          echo "No CloudFormation templates found"
+          exit 1
+        fi

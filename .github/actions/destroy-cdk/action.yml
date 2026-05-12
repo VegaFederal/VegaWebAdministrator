@@ -1,0 +1,19 @@
+name: 'Destroy AWS CDK Resources'
+description: 'Destroys resources deployed with AWS CDK'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install and Build CDK Project
+      shell: bash
+      run: |
+        cd infrastructure/cdk
+        npm ci
+        npm run build
+    
+    - name: Destroy CDK Resources
+      shell: bash
+      run: |
+        cd infrastructure/cdk
+        echo "Destroying all CDK stacks"
+        npm run cdk destroy -- --force --all
