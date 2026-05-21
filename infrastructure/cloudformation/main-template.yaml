@@ -19,6 +19,30 @@ Parameters:
     Type: List<AWS::EC2::Subnet::Id>
     Description: List of existing subnet IDs for deployment (minimum 2 recommended)
 
+  DomainName:
+    Type: String
+    Default: ""
+    Description: Custom domain name (e.g., example.com)
+
+  WwwDomain:
+    Type: String
+    Default: ""
+    Description: WWW subdomain (e.g., www.vegafederal.com)
+
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: ACM Certificate ARN for HTTPS
+
+  CreateHostedZone:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Create Route 53 hosted zone for domain
+
+Conditions:
+  HasVpcConfig: !Not [!Equals [!Ref VpcId, '']]
+
 Resources:
   # Security Groups Stack
   SecurityGroupsStack:
@@ -39,6 +63,10 @@ Resources:
       TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/static-website.yaml
       Parameters:
         Environment: !Ref Environment
+        DomainName: !Ref DomainName
+        WwwDomain: !Ref WwwDomain
+        CertificateArn: !Ref CertificateArn
+        CreateHostedZone: !Ref CreateHostedZone
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -59,6 +87,7 @@ Resources:
 
 Outputs:
   WebServerSecurityGroupId:
+    Condition: HasVpcConfig
     Description: Security Group ID for web servers
     Value: !GetAtt SecurityGroupsStack.Outputs.WebServerSecurityGroupId
     Export:
@@ -69,6 +98,21 @@ Outputs:
     Value: !GetAtt StaticWebsiteStack.Outputs.WebsiteBucketName
     Export:
       Name: !Sub ${AWS::StackName}-WebsiteBucketName
+
+  WebsiteURL:
+    Description: S3 Bucket for website content
+    Value: !GetAtt StaticWebsiteStack.Outputs.CloudFrontDistributionDomainName
+
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !GetAtt StaticWebsiteStack.Outputs.CloudFrontDistributionId
+
+  CloudFrontLogsBucketName:
+    Description: S3 Bucket for CloudFront logs
+    Value: !GetAtt StaticWebsiteStack.Outputs.CloudFrontLogsBucketName
+    Export:
+      Name: !Sub ${AWS::StackName}-CloudFrontLogsBucketName
+
 
   CloudFrontDistributionDomainName:
     Description: CloudFront Distribution Domain Name
