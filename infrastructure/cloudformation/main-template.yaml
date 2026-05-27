@@ -110,8 +110,3 @@ Outputs:
     Export:
       Name: !Sub ${AWS::StackName}-CloudFrontDomainName
       
-  LoadBalancerDnsName:
-    Description: DNS name of the Application Load Balancer
-    Value: !GetAtt LoadBalancerStack.Outputs.LoadBalancerDnsName
-    Export:
-      Name: !Sub ${AWS::StackName}-LoadBalancerDnsName
