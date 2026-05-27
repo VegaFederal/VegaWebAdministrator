@@ -1,0 +1,15 @@
+{
+  "projectName": "VegaWebAWS",
+  "description": "Production deployment configuration",
+  "infraType": "cf",
+  "applicationType": "serverless",
+  "awsRegion": "us-east-1",
+  "vpcId": "vpc-03d0b258d48f85428",
+  "subnetIds": "subnet-0bfc75f544486f0c4",
+  "domainName": "vegafederal.com",
+  "wwwDomain": "www.vegafederal.com",
+  "certificateArn": "arn:aws:acm:us-east-1:423153317214:certificate/b1f2aefd-112a-4dd8-b241-ccbae90c471e",
+  "createHostedZone": "true",
+  "githubRepo": "https://github.com/VegaFederal/VegaWebAWS.git",
+  "environment": "production"
+}
