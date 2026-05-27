@@ -14,6 +14,10 @@ Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: ID of the existing company VPC
+
+  TemplateBucket:
+    Type: String
+    Description: S3 bucket containing CloudFormation templates
   
   SubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
