@@ -75,20 +75,6 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # Load Balancer Stack
-  LoadBalancerStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/load-balancer.yaml
-      Parameters:
-        Environment: !Ref Environment
-        VpcId: !Ref VpcId
-        SubnetIds: !Join [',', !Ref SubnetIds]
-        WebServerSecurityGroupId: !GetAtt SecurityGroupsStack.Outputs.WebServerSecurityGroupId
-      Tags:
-        - Key: Environment
-          Value: !Ref Environment
-
 Outputs:
   WebServerSecurityGroupId:
     Condition: HasVpcConfig
