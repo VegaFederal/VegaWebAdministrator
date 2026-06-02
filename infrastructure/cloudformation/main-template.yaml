@@ -72,6 +72,8 @@ Resources:
           Value: !Ref Environment
 
 Outputs:
+  # Your outputs will go here
+
   WebServerSecurityGroupId:
     Condition: HasVpcConfig
     Description: Security Group ID for web servers
@@ -98,11 +100,3 @@ Outputs:
     Value: !GetAtt StaticWebsiteStack.Outputs.CloudFrontLogsBucketName
     Export:
       Name: !Sub ${AWS::StackName}-CloudFrontLogsBucketName
-
-
-  CloudFrontDistributionDomainName:
-    Description: CloudFront Distribution Domain Name
-    Value: !GetAtt StaticWebsiteStack.Outputs.CloudFrontDistributionDomainName
-    Export:
-      Name: !Sub ${AWS::StackName}-CloudFrontDomainName
-      
