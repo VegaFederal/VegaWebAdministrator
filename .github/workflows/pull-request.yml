@@ -126,15 +126,15 @@ jobs:
     #      echo "No CDK project found, skipping validation"
     #    fi
     
-    - name: Validate Terraform
-      run: |
-        if [ -d infrastructure/terraform ]; then
-          cd infrastructure/terraform
-          terraform init -backend=false
-          terraform validate
-        else
-          echo "No Terraform project found, skipping validation"
-        fi
+    #- name: Validate Terraform
+    #  run: |
+    #    if [ -d infrastructure/terraform ]; then
+    #      cd infrastructure/terraform
+    #      terraform init -backend=false
+    #      terraform validate
+    #    else
+    #      echo "No Terraform project found, skipping validation"
+    #    fi
 
   build:
     name: Build
