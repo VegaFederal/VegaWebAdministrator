@@ -188,6 +188,7 @@ jobs:
           parameter-overrides: >-
             Environment=${{ env.ENVIRONMENT }},
             VpcId=${{ env.VPC_ID }},
+            SubnetIds=${{ env.SUBNET_IDS }},
             TemplateBucket=${{ env.TEMPLATE_BUCKET }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
