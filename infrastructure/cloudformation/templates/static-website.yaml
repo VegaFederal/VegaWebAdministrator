@@ -58,7 +58,11 @@ Resources:
   WebsiteBucket:
     Type: AWS::S3::Bucket
     Properties:
-      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -85,6 +89,9 @@ Resources:
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
       DistributionConfig:
         Origins:
           - DomainName: !GetAtt WebsiteBucket.RegionalDomainName
@@ -108,9 +115,6 @@ Resources:
         PriceClass: PriceClass_100
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
-        Tags:
-          - Key: Environment
-            Value: !Ref Environment
 
 # Security Headers Policy
   SecurityHeadersPolicy:
