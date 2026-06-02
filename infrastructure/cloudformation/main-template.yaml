@@ -52,7 +52,6 @@ Resources:
       Parameters:
         Environment: !Ref Environment
         VpcId: !Ref VpcId
-        SubnetIds: !Ref SubnetIds
       Tags:
         - Key: Environment
           Value: !Ref Environment
