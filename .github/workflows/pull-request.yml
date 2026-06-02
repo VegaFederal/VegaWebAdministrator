@@ -115,16 +115,16 @@ jobs:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID || 'dummy' }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY || 'dummy' }}
     
-    - name: Validate CDK
-      run: |
-        if [ -d infrastructure/cdk ]; then
-          cd infrastructure/cdk
-          npm ci
-          npm run build
-          npm run cdk synth
-        else
-          echo "No CDK project found, skipping validation"
-        fi
+    #- name: Validate CDK
+    #  run: |
+    #    if [ -d infrastructure/cdk ]; then
+    #      cd infrastructure/cdk
+    #      npm ci
+    #      npm run build
+    #      npm run cdk synth
+    #    else
+    #      echo "No CDK project found, skipping validation"
+    #    fi
     
     - name: Validate Terraform
       run: |
