@@ -8,16 +8,16 @@ Parameters:
     Description: The deployment environment
   
   VpcId:
-    Type: AWS::EC2::VPC::Id
+    Type: String
     Description: ID of the existing company VPC
 
   TemplateBucket:
     Type: String
     Description: S3 bucket containing CloudFormation templates
-  
+
   SubnetIds:
-    Type: List<AWS::EC2::Subnet::Id>
-    Description: List of existing subnet IDs for deployment (minimum 2 recommended)
+    Type: String
+    Description: Comma-delimited list of subnet IDs for deployment
 
   DomainName:
     Type: String
@@ -52,6 +52,7 @@ Resources:
       Parameters:
         Environment: !Ref Environment
         VpcId: !Ref VpcId
+        SubnetIds: !Ref SubnetIds
       Tags:
         - Key: Environment
           Value: !Ref Environment
