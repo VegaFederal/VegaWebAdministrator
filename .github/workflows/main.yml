@@ -188,8 +188,11 @@ jobs:
           parameter-overrides: >-
             Environment=${{ env.ENVIRONMENT }},
             VpcId=${{ env.VPC_ID }},
-            SubnetIds=${{ env.SUBNET_IDS }},
-            TemplateBucket=${{ env.TEMPLATE_BUCKET }}
+            TemplateBucket=${{ env.TEMPLATE_BUCKET }},
+            DomainName=${{ env.DOMAIN_NAME }},
+            WwwDomain=${{ env.WWW_DOMAIN }},
+            CertificateArn=${{ env.CERTIFICATE_ARN }},
+            CreateHostedZone=${{ env.CREATE_HOSTED_ZONE }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
