@@ -5,13 +5,9 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-    AllowedValues:
-      - dev
-      - test
-      - prod
     Description: The deployment environment
 
-    DomainName:
+  DomainName:
     Type: String
     Default: ""
     Description: Custom domain name (e.g., example.com)
@@ -62,7 +58,11 @@ Resources:
   WebsiteBucket:
     Type: AWS::S3::Bucket
     Properties:
-      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -75,16 +75,30 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
+  # Origin Access Control for CloudFront
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${Environment}-${AWS::AccountId}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
   # CloudFront Distribution
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
       DistributionConfig:
         Origins:
           - DomainName: !GetAtt WebsiteBucket.RegionalDomainName
             Id: S3Origin
             S3OriginConfig:
-              OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !Ref CloudFrontOriginAccessControl
         Enabled: true
         DefaultRootObject: index.html
         DefaultCacheBehavior:
@@ -101,9 +115,6 @@ Resources:
         PriceClass: PriceClass_100
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
-        Tags:
-          - Key: Environment
-            Value: !Ref Environment
 
 # Security Headers Policy
   SecurityHeadersPolicy:
@@ -133,25 +144,21 @@ Resources:
               Value: geolocation=(), microphone=(), camera=()
               Override: false
 
-  CloudFrontOriginAccessIdentity:
-    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
-    Properties:
-      CloudFrontOriginAccessIdentityConfig:
-        Comment: !Sub ${AWS::StackName} OAI
-
-  # Bucket Policy for CloudFront access
+  # Bucket Policy for CloudFront OAC access
   WebsiteBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref WebsiteBucket
       PolicyDocument:
         Statement:
-          - Action:
-              - s3:GetObject
+          - Action: s3:GetObject
             Effect: Allow
             Resource: !Sub ${WebsiteBucket.Arn}/*
             Principal:
-              CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
+              Service: cloudfront.amazonaws.com
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}
 
    # AWS WAF WebACL for security
   WebACL:
