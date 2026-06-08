@@ -5,19 +5,43 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-    AllowedValues:
-      - dev
-      - test
-      - prod
     Description: The deployment environment
   
   VpcId:
-    Type: AWS::EC2::VPC::Id
+    Type: String
     Description: ID of the existing company VPC
-  
+
+  TemplateBucket:
+    Type: String
+    Description: S3 bucket containing CloudFormation templates
+
   SubnetIds:
-    Type: List<AWS::EC2::Subnet::Id>
-    Description: List of existing subnet IDs for deployment (minimum 2 recommended)
+    Type: String
+    Description: Comma-delimited list of subnet IDs for deployment
+
+  DomainName:
+    Type: String
+    Default: ""
+    Description: Custom domain name (e.g., example.com)
+
+  WwwDomain:
+    Type: String
+    Default: ""
+    Description: WWW subdomain (e.g., www.vegafederal.com)
+
+  CertificateArn:
+    Type: String
+    Default: ""
+    Description: ACM Certificate ARN for HTTPS
+
+  CreateHostedZone:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Create Route 53 hosted zone for domain
+
+Conditions:
+  HasVpcConfig: !Not [!Equals [!Ref VpcId, '']]
 
 Resources:
   # Security Groups Stack
@@ -39,26 +63,19 @@ Resources:
       TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/static-website.yaml
       Parameters:
         Environment: !Ref Environment
-      Tags:
-        - Key: Environment
-          Value: !Ref Environment
-
-  # Load Balancer Stack
-  LoadBalancerStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/load-balancer.yaml
-      Parameters:
-        Environment: !Ref Environment
-        VpcId: !Ref VpcId
-        SubnetIds: !Join [',', !Ref SubnetIds]
-        WebServerSecurityGroupId: !GetAtt SecurityGroupsStack.Outputs.WebServerSecurityGroupId
+        DomainName: !Ref DomainName
+        WwwDomain: !Ref WwwDomain
+        CertificateArn: !Ref CertificateArn
+        CreateHostedZone: !Ref CreateHostedZone
       Tags:
         - Key: Environment
           Value: !Ref Environment
 
 Outputs:
+  # Your outputs will go here
+
   WebServerSecurityGroupId:
+    Condition: HasVpcConfig
     Description: Security Group ID for web servers
     Value: !GetAtt SecurityGroupsStack.Outputs.WebServerSecurityGroupId
     Export:
@@ -70,14 +87,16 @@ Outputs:
     Export:
       Name: !Sub ${AWS::StackName}-WebsiteBucketName
 
-  CloudFrontDistributionDomainName:
-    Description: CloudFront Distribution Domain Name
+  WebsiteURL:
+    Description: S3 Bucket for website content
     Value: !GetAtt StaticWebsiteStack.Outputs.CloudFrontDistributionDomainName
+
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !GetAtt StaticWebsiteStack.Outputs.CloudFrontDistributionId
+
+  CloudFrontLogsBucketName:
+    Description: S3 Bucket for CloudFront logs
+    Value: !GetAtt StaticWebsiteStack.Outputs.CloudFrontLogsBucketName
     Export:
-      Name: !Sub ${AWS::StackName}-CloudFrontDomainName
-      
-  LoadBalancerDnsName:
-    Description: DNS name of the Application Load Balancer
-    Value: !GetAtt LoadBalancerStack.Outputs.LoadBalancerDnsName
-    Export:
-      Name: !Sub ${AWS::StackName}-LoadBalancerDnsName
+      Name: !Sub ${AWS::StackName}-CloudFrontLogsBucketName
