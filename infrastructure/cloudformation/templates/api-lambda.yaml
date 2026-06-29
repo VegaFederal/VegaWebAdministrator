@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: API Gateway for VegaWebAdministrator
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: The deployment environment
+  DeploymentBucket:
+    Type: String
+    Description: S3 bucket containing Lambda functions
+  TableName: # parameter for the DynamoDB table name from the dynamodb.yaml file.
+    Type: String
+    Description: DynamoDB table name
+  TableArn: # parameter for the DynamoDB table ARN from the dynamodb.yaml file.
+    Type: String
+    Description: DynamoDB table ARN
+  AllowedOrigin:
+    Type: String
+    Default: ""
+    Description: Allowed site origin (e.g. https://vegafederal.com)
+
+Resources:
+  TeamMembersApi:
+    Type: 'AWS::ApiGatewayV2::Api'
+    Properties:
+      Name: !Sub VegaWebAdmin-TeamMembers-${Environment}
+      ProtocolType: HTTP
+
+  TeamMembersIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref TeamMembersApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt TeamMembersFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  TeamMembersLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                Resource: !Ref TableArn
+
+  TeamMembersFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub AdminTeamMembersFunction-${Environment}
+      Runtime: python3.12
+      Role: !GetAtt TeamMembersLambdaRole.Arn
+      Handler: index.handler
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref TableName
+          TABLE_ARN: !Ref TableArn
+          ALLOWED_ORIGIN: !Ref AllowedOrigin
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: !Sub ${Environment}/lambda/team-members/index.zip
+
+  TeamMembersLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref TeamMembersFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${TeamMembersApi}/*/*
+
+  GetTeamMembersRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref TeamMembersApi
+      RouteKey: GET /team-members
+      Target: !Sub integrations/${TeamMembersIntegration}
+
+  PostTeamMembersRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref TeamMembersApi
+      RouteKey: POST /team-members
+      Target: !Sub integrations/${TeamMembersIntegration}
+
+  PutTeamMembersRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref TeamMembersApi
+      RouteKey: PUT /team-members/{id}
+      Target: !Sub integrations/${TeamMembersIntegration}
+
+  DeleteTeamMembersRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref TeamMembersApi
+      RouteKey: DELETE /team-members/{id}
+      Target: !Sub integrations/${TeamMembersIntegration}
+
+  TeamMembersApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref TeamMembersApi
+      StageName: $default
+      AutoDeploy: true
+
+Outputs:
+  ApiEndpoint:
+    Description: Team Members API endpoint URL
+    Value: !Sub https://${TeamMembersApi}.execute-api.${AWS::Region}.amazonaws.com/team-members
+
+  ApiDomainName:
+    Description: Team Members API domain name
+    Value: !Sub ${TeamMembersApi}.execute-api.${AWS::Region}.amazonaws.com
