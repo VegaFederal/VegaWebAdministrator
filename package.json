@@ -16,7 +16,7 @@
     "vite": "^7.3.6"
   },
   "devDependencies": {
-    "@vitejs/plugin-react-oxc": "^0.4.3",
+    "@vitejs/plugin-react": "^5.2.0",
     "typescript": "^5.8.0"
   }
 }
