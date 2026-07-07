@@ -40,6 +40,23 @@ Parameters:
     AllowedValues: ["true", "false"]
     Description: Create Route 53 hosted zone for domain
 
+  DeploymentBucket:
+    Type: String
+    Description: S3 bucket containing Lambda deployment packages
+
+  TableName:
+    Type: String
+    Description: Shared DynamoDB table name (e.g. team-members-dev, team-members-production)
+
+  TableArn:
+    Type: String
+    Description: Shared DynamoDB table ARN
+
+  AllowedOrigin:
+    Type: String
+    Default: ""
+    Description: Allowed site origin for Lambda (e.g. https://d123.cloudfront.net or https://vegafederal.com)
+
 Conditions:
   HasVpcConfig: !Not [!Equals [!Ref VpcId, '']]
 
@@ -52,6 +69,21 @@ Resources:
       Parameters:
         Environment: !Ref Environment
         VpcId: !Ref VpcId
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # API + Lambda Stack
+  ApiLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/api-lambda.yaml
+      Parameters:
+        Environment: !Ref Environment
+        DeploymentBucket: !Ref DeploymentBucket
+        TableName: !Ref TableName
+        TableArn: !Ref TableArn
+        AllowedOrigin: !Ref AllowedOrigin
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -100,3 +132,7 @@ Outputs:
     Value: !GetAtt StaticWebsiteStack.Outputs.CloudFrontLogsBucketName
     Export:
       Name: !Sub ${AWS::StackName}-CloudFrontLogsBucketName
+
+  ApiEndpoint:
+    Description: Team Members API endpoint URL
+    Value: !GetAtt ApiLambdaStack.Outputs.ApiEndpoint

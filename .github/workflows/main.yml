@@ -102,7 +102,7 @@ jobs:
             aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }} || true
             
             # Check for any remaining nested stacks and force delete them
-            NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ContactPageStack" "${{ env.STACK_NAME }}-StaticWebsiteStack")
+            NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ApiLambdaStack" "${{ env.STACK_NAME }}-ContactPageStack" "${{ env.STACK_NAME }}-StaticWebsiteStack")
             
             for prefix in "${NESTED_STACK_PREFIXES[@]}"; do
               for stack in $(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --query "StackSummaries[?starts_with(StackName, '$prefix')].StackName" --output text 2>/dev/null || echo ""); do
@@ -166,6 +166,34 @@ jobs:
           echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
           echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
 
+      - name: Set shared database environment
+        run: |
+          echo "DB_ENVIRONMENT=dev" >> $GITHUB_ENV
+
+      - name: Resolve shared database from VegaWebAWS
+        run: |
+          DB_STACK_NAME="vega-database-${{ env.DB_ENVIRONMENT }}"
+          if ! aws cloudformation describe-stacks --stack-name $DB_STACK_NAME 2>/dev/null; then
+            echo "ERROR: Shared database stack $DB_STACK_NAME not found."
+            echo "The static database must be created by VegaWebAWS first (VegaFederal/VegaWebAWS#418)."
+            exit 1
+          fi
+          DB_TABLE_NAME=$(aws cloudformation describe-stacks \
+            --stack-name $DB_STACK_NAME \
+            --query "Stacks[0].Outputs[?OutputKey=='TeamMembersTableName'].OutputValue" \
+            --output text)
+          DB_TABLE_ARN=$(aws cloudformation describe-stacks \
+            --stack-name $DB_STACK_NAME \
+            --query "Stacks[0].Outputs[?OutputKey=='TeamMembersTableArn'].OutputValue" \
+            --output text)
+          if [ -z "$DB_TABLE_NAME" ] || [ "$DB_TABLE_NAME" = "None" ]; then
+            echo "ERROR: TeamMembersTableName output not found on $DB_STACK_NAME"
+            exit 1
+          fi
+          echo "Using shared table: $DB_TABLE_NAME"
+          echo "DB_TABLE_NAME=$DB_TABLE_NAME" >> $GITHUB_ENV
+          echo "DB_TABLE_ARN=$DB_TABLE_ARN" >> $GITHUB_ENV
+
       - name: Create template bucket
         run: |
             TIMESTAMP=$(date +%s)
@@ -180,6 +208,12 @@ jobs:
       - name: Upload templates to S3
         run: aws s3 sync infrastructure/cloudformation/templates/ s3://$TEMPLATE_BUCKET/templates/
 
+      - name: Package Lambda functions
+        run: |
+          cd src/lambda/team-members
+          zip index.zip index.py
+          aws s3 cp index.zip s3://$TEMPLATE_BUCKET/$ENVIRONMENT/lambda/team-members/index.zip
+
       - name: Deploy CloudFormation stack
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
@@ -189,7 +223,10 @@ jobs:
             Environment=${{ env.ENVIRONMENT }},
             VpcId=${{ env.VPC_ID }},
             SubnetIds=${{ env.SUBNET_IDS }},
-            TemplateBucket=${{ env.TEMPLATE_BUCKET }}
+            TemplateBucket=${{ env.TEMPLATE_BUCKET }},
+            DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
+            TableName=${{ env.DB_TABLE_NAME }},
+            TableArn=${{ env.DB_TABLE_ARN }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
@@ -206,8 +243,10 @@ jobs:
       - name: Get CloudFront URL
         run: |
           CF_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" --output text)
+          API_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "Branch: ${{ env.BRANCH_NAME }} deployed as environment: ${{ env.ENVIRONMENT }}"
           echo "Your website is available at: https://$CF_URL"
+          echo "Team members API: $API_URL"
 
   deploy-production:
     if: github.event.inputs.action == 'deploy-production' || (github.ref == 'refs/heads/production' && github.event_name == 'push')
@@ -250,6 +289,31 @@ jobs:
           
           echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
           echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
+          echo "DB_ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
+
+      - name: Resolve shared database from VegaWebAWS
+        run: |
+          DB_STACK_NAME="vega-database-${{ env.DB_ENVIRONMENT }}"
+          if ! aws cloudformation describe-stacks --stack-name $DB_STACK_NAME 2>/dev/null; then
+            echo "ERROR: Shared database stack $DB_STACK_NAME not found."
+            echo "The static database must be created by VegaWebAWS first (VegaFederal/VegaWebAWS#418)."
+            exit 1
+          fi
+          DB_TABLE_NAME=$(aws cloudformation describe-stacks \
+            --stack-name $DB_STACK_NAME \
+            --query "Stacks[0].Outputs[?OutputKey=='TeamMembersTableName'].OutputValue" \
+            --output text)
+          DB_TABLE_ARN=$(aws cloudformation describe-stacks \
+            --stack-name $DB_STACK_NAME \
+            --query "Stacks[0].Outputs[?OutputKey=='TeamMembersTableArn'].OutputValue" \
+            --output text)
+          if [ -z "$DB_TABLE_NAME" ] || [ "$DB_TABLE_NAME" = "None" ]; then
+            echo "ERROR: TeamMembersTableName output not found on $DB_STACK_NAME"
+            exit 1
+          fi
+          echo "Using shared table: $DB_TABLE_NAME"
+          echo "DB_TABLE_NAME=$DB_TABLE_NAME" >> $GITHUB_ENV
+          echo "DB_TABLE_ARN=$DB_TABLE_ARN" >> $GITHUB_ENV
 
       - name: Create template bucket
         run: |
@@ -264,6 +328,12 @@ jobs:
       - name: Upload templates to S3
         run: aws s3 sync infrastructure/cloudformation/templates/ s3://$TEMPLATE_BUCKET/templates/
 
+      - name: Package Lambda functions
+        run: |
+          cd src/lambda/team-members
+          zip index.zip index.py
+          aws s3 cp index.zip s3://$TEMPLATE_BUCKET/$ENVIRONMENT/lambda/team-members/index.zip
+
       - name: Deploy CloudFormation stack
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
@@ -273,6 +343,9 @@ jobs:
             Environment=${{ env.ENVIRONMENT }},
             VpcId=${{ env.VPC_ID }},
             TemplateBucket=${{ env.TEMPLATE_BUCKET }},
+            DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
+            TableName=${{ env.DB_TABLE_NAME }},
+            TableArn=${{ env.DB_TABLE_ARN }},
             DomainName=${{ env.DOMAIN_NAME }},
             WwwDomain=${{ env.WWW_DOMAIN }},
             CertificateArn=${{ env.CERTIFICATE_ARN }},
@@ -306,8 +379,10 @@ jobs:
       - name: Get CloudFront URL
         run: |
           CF_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteUrl'].OutputValue" --output text)
+          API_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "Production deployment completed!"
           echo "Your production website is available at: https://$CF_URL"
+          echo "Team members API: $API_URL"
   cleanup:
     if: github.event.inputs.action == 'cleanup'
     runs-on: ubuntu-latest
@@ -376,7 +451,7 @@ jobs:
             echo "Waiting for stack deletion..."
             aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }} || true
             
-            NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ContactPageStack" "${{ env.STACK_NAME }}-StaticWebsiteStack")
+            NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ApiLambdaStack" "${{ env.STACK_NAME }}-ContactPageStack" "${{ env.STACK_NAME }}-StaticWebsiteStack")
             
             for prefix in "${NESTED_STACK_PREFIXES[@]}"; do
               for stack in $(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --query "StackSummaries[?starts_with(StackName, '$prefix')].StackName" --output text 2>/dev/null || echo ""); do
