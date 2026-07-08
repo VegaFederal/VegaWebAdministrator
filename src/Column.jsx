@@ -1,20 +1,23 @@
-import { useDroppable } from '@dnd-kit/core';
-import { TaskCard } from './TaskCard.jsx';
 import React from 'react';
+import { TaskCard } from './TaskCard.jsx'; // Adjust path if needed
+import { useDroppable } from '@dnd-kit/core';
 
-export function Column({ column, tasks }) {
+export function Column({ column, tasks, onDeleteTask }) {
   const { setNodeRef } = useDroppable({
     id: column.id,
   });
 
   return (
-    <div className="flex w-80 flex-col rounded-lg bg-neutral-800 p-4">
-      <h2 className="mb-4 font-semibold text-neutral-100">{column.title}</h2>
-      
-      <div ref={setNodeRef} className="flex flex-1 flex-col gap-4">
-        {tasks.map((task) => {
-          return <TaskCard key={task.id} task={task} />;
-        })}
+    <div ref={setNodeRef} className="bg-neutral-800 p-4 rounded-lg w-72 min-h-[500px]">
+      <h2 className="text-white font-bold mb-4">Column {column.title}</h2>
+      <div className="flex flex-col gap-4">
+        {tasks.map((task) => (
+          <TaskCard 
+            key={task.id} 
+            task={task} 
+            onDelete={onDeleteTask} // Pass handler to the TaskCard
+          />
+        ))}
       </div>
     </div>
   );

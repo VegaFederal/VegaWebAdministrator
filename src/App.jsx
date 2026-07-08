@@ -24,6 +24,19 @@ const INITIAL_TASKS = [
 export default function App() {
   const [tasks, setTasks] = useState(INITIAL_TASKS);
 
+  function addTaskToFirstColumn() {
+    const newTask = {
+      id: String(Date.now()),
+      status: '1',
+    };
+    setTasks(prevTasks => [...prevTasks, newTask]);
+  }
+
+  // Deletion logic: Filter out the card with the matching ID
+  function deleteTask(taskId) {
+    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+  }
+
   function handleDragEnd(event) {
     const { active, over } = event;
     if (!over) return;
@@ -31,17 +44,24 @@ export default function App() {
     const taskId = active.id;
     const newStatus = over.id;
 
-    setTasks(prevTasks => 
+    setTasks(prevTasks =>
       prevTasks.map((task) =>
-        task.id === taskId
-          ? { ...task, status: newStatus }
-          : task
+        task.id === taskId ? { ...task, status: newStatus } : task
       )
     );
   }
 
   return (
     <div className="p-4">
+      <div className="mb-4">
+        <button
+          onClick={addTaskToFirstColumn}
+          className="bg-grayscale-800 text-white font-bold py-2 px-4 rounded shadow"
+        >
+          + Add Task
+        </button>
+      </div>
+
       <div className="flex gap-8">
         <DndContext onDragEnd={handleDragEnd}>
           {COLUMNS.map((column) => {
@@ -50,6 +70,7 @@ export default function App() {
                 key={column.id}
                 column={column}
                 tasks={tasks.filter((task) => task.status === column.id)}
+                onDeleteTask={deleteTask} // Pass handler to the Column
               />
             );
           })}
