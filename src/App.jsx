@@ -32,9 +32,15 @@ export default function App() {
     setTasks(prevTasks => [...prevTasks, newTask]);
   }
 
-  // Deletion logic: Filter out the card with the matching ID
   function deleteTask(taskId) {
     setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+  }
+
+  // NEW FUNCTION: Updates specific fields on a task
+  function updateTask(taskId, updatedTask) {
+    setTasks(prevTasks =>
+      prevTasks.map(task => (task.id === taskId ? updatedTask : task))
+    );
   }
 
   function handleDragEnd(event) {
@@ -61,7 +67,6 @@ export default function App() {
           + Add Task
         </button>
       </div>
-
       <div className="flex gap-8">
         <DndContext onDragEnd={handleDragEnd}>
           {COLUMNS.map((column) => {
@@ -70,7 +75,8 @@ export default function App() {
                 key={column.id}
                 column={column}
                 tasks={tasks.filter((task) => task.status === column.id)}
-                onDeleteTask={deleteTask} // Pass handler to the Column
+                onDeleteTask={deleteTask}
+                onUpdateTask={updateTask} // <-- Added prop here
               />
             );
           })}

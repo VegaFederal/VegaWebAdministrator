@@ -1,8 +1,8 @@
 import React from 'react';
-import { TaskCard } from './TaskCard.jsx'; // Adjust path if needed
+import { TaskCard } from './TaskCard.jsx';
 import { useDroppable } from '@dnd-kit/core';
 
-export function Column({ column, tasks, onDeleteTask }) {
+export function Column({ column, tasks, onDeleteTask, onUpdateTask }) { // <-- Added prop here
   const { setNodeRef } = useDroppable({
     id: column.id,
   });
@@ -12,10 +12,11 @@ export function Column({ column, tasks, onDeleteTask }) {
       <h2 className="text-white font-bold mb-4">Column {column.title}</h2>
       <div className="flex flex-col gap-4">
         {tasks.map((task) => (
-          <TaskCard 
-            key={task.id} 
-            task={task} 
-            onDelete={onDeleteTask} // Pass handler to the TaskCard
+          <TaskCard
+            key={task.id}
+            task={task}
+            onDelete={onDeleteTask}
+            onUpdateTask={onUpdateTask} // <-- Forwarded prop here
           />
         ))}
       </div>
