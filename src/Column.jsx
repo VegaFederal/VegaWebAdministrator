@@ -2,7 +2,7 @@ import React from 'react';
 import { TaskCard } from './TaskCard.jsx';
 import { useDroppable } from '@dnd-kit/core';
 
-export function Column({ column, tasks, onDeleteTask, onUpdateTask }) { // <-- Added prop here
+export function Column({ column, tasks, onDeleteTask, onUpdateTask }) {
   const { setNodeRef } = useDroppable({
     id: column.id,
   });
@@ -16,7 +16,7 @@ export function Column({ column, tasks, onDeleteTask, onUpdateTask }) { // <-- A
             key={task.id}
             task={task}
             onDelete={onDeleteTask}
-            onUpdateTask={onUpdateTask} // <-- Forwarded prop here
+            onUpdateTask={onUpdateTask}
           />
         ))}
       </div>

@@ -36,7 +36,6 @@ export default function App() {
     setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
   }
 
-  // NEW FUNCTION: Updates specific fields on a task
   function updateTask(taskId, updatedTask) {
     setTasks(prevTasks =>
       prevTasks.map(task => (task.id === taskId ? updatedTask : task))
@@ -76,7 +75,7 @@ export default function App() {
                 column={column}
                 tasks={tasks.filter((task) => task.status === column.id)}
                 onDeleteTask={deleteTask}
-                onUpdateTask={updateTask} // <-- Added prop here
+                onUpdateTask={updateTask}
               />
             );
           })}

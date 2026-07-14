@@ -1,36 +1,55 @@
 import { useDraggable } from '@dnd-kit/core';
-import ryan from '../src/assets/Ryan.png';
-import React, { useState } from 'react';
+import defaultImage from '../src/assets/Ryan.png'; // Fallback if no custom image is picked
+import React, { useState, useRef } from 'react';
 
 export function TaskCard({ task, onDelete, onUpdateTask }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: task.id,
   });
 
-  // Toggle states can stay local since they are just for UI mode
+  const fileInputRef = useRef(null);
+
+  // UI editing toggles
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingSecond, setIsEditingSecond] = useState(false);
   const [isEditingThird, setIsEditingThird] = useState(false);
 
-  // Fallback to default strings if they don't exist on the task object yet
+  // Field fallbacks
   const text = task.text ?? "Name";
   const secondText = task.secondText ?? "Title";
   const thirdText = task.thirdText ?? "Questions";
+  const cardImage = task.image ?? defaultImage;
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : undefined;
 
-  // Helper to push text updates to the parent state
   const handleUpdate = (key, value) => {
     onUpdateTask(task.id, { ...task, [key]: value });
+  };
+
+  // Convert uploaded file into a base64 Data URL to save in state
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      handleUpdate('image', reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerFileInput = (e) => {
+    e.stopPropagation(); // Prevents triggering dnd-kit drag mechanics
+    fileInputRef.current.click();
   };
 
   return (
     <div
       ref={setNodeRef}
       {...attributes}
-      className="relative rounded-lg bg-neutral-700 p-4 shadow-sm hover:shadow-md"
+      className="relative rounded-lg bg-neutral-700 p-4 shadow-sm hover:shadow-md transition-shadow"
       style={style}
     >
       {/* DELETE BUTTON */}
@@ -39,15 +58,40 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           e.stopPropagation();
           onDelete(task.id);
         }}
-        className="absolute top-2 right-2 text-neutral-400 hover:text-red-500 font-bold px-2 py-0.5 rounded transition-colors text-sm"
+        className="absolute top-2 right-2 text-neutral-400 hover:text-red-500 font-bold px-2 py-0.5 rounded transition-colors text-sm z-10"
         title="Delete task"
       >
         ✕
       </button>
 
-      {/* DRAG HANDLE */}
-      <div {...listeners} className="cursor-grab flex justify-center mb-[40px]">
-        <img src={ryan} alt='' className='w-[200px] h-[200px] pointer-events-none' />
+      {/* DRAG HANDLE & IMAGE CONTAINER */}
+      <div {...listeners} className="cursor-grab flex flex-col items-center mb-4">
+        <div className="rounded-md overflow-hidden border border-neutral-600 mb-2">
+          <img 
+            src={cardImage} 
+            alt="Card graphic" 
+            className="w-[200px] h-[200px] object-cover pointer-events-none" 
+          />
+        </div>
+
+        {/* CHANGE PHOTO BUTTON */}
+        <button
+          onClick={triggerFileInput}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="bg-neutral-600 hover:bg-neutral-500 text-white text-xs font-semibold py-1.5 px-3 rounded transition-colors cursor-pointer"
+        >
+          Change Photo
+        </button>
+
+        {/* Hidden File Input */}
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          onChange={handleImageChange} 
+          accept="image/*" 
+          className="hidden" 
+        />
       </div>
 
       {/* FIRST EDITABLE TEXT BOX */}
