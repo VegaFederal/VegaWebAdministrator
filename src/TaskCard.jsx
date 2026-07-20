@@ -1,5 +1,5 @@
 import { useDraggable } from '@dnd-kit/core';
-import defaultImage from '../src/assets/Ryan.png'; // Fallback if no custom image is picked
+import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
 import React, { useState, useRef } from 'react';
 
 export function TaskCard({ task, onDelete, onUpdateTask }) {
@@ -18,7 +18,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   const text = task.text ?? "Name";
   const secondText = task.secondText ?? "Title";
   const thirdText = task.thirdText ?? "Questions";
-  const cardImage = task.image ?? defaultImage;
+  const cardImage = (task.image && task.image !== "") ? task.image : defaultImage;
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -45,6 +45,30 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
     fileInputRef.current.click();
   };
 
+  // Triggers a browser file download of the card data as a JSON file
+  const handleSaveToJson = (e) => {
+    e.stopPropagation(); // Stops drag events
+
+    const exportData = {
+      id: task.id,
+      image: cardImage,
+      text: text,
+      secondText: secondText,
+      thirdText: thirdText,
+    };
+
+    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+      JSON.stringify(exportData, null, 2)
+    )}`;
+    
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', jsonString);
+    downloadAnchor.setAttribute('download', `task-card-${task.id}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -67,30 +91,32 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
       {/* DRAG HANDLE & IMAGE CONTAINER */}
       <div {...listeners} className="cursor-grab flex flex-col items-center mb-4">
         <div className="rounded-md overflow-hidden border border-neutral-600 mb-2">
-          <img 
-            src={cardImage} 
-            alt="Card graphic" 
-            className="w-[200px] h-[200px] object-cover pointer-events-none" 
+          <img
+            src={cardImage}
+            alt="Card graphic"
+            className="w-[200px] h-[200px] object-cover pointer-events-none"
           />
         </div>
 
-        {/* CHANGE PHOTO BUTTON */}
-        <button
-          onClick={triggerFileInput}
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="bg-neutral-600 hover:bg-neutral-500 text-white text-xs font-semibold py-1.5 px-3 rounded transition-colors cursor-pointer"
-        >
-          Change Photo
-        </button>
+        {/* BUTTON BAR FOR ACTION ITEMS */}
+        <div className="flex gap-2" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+          {/* CHANGE PHOTO BUTTON */}
+          <button
+            onClick={triggerFileInput}
+            className="bg-neutral-600 hover:bg-neutral-500 text-white text-xs font-semibold py-1.5 px-3 rounded transition-colors cursor-pointer"
+          >
+            Change Photo
+          </button>
+
+        </div>
 
         {/* Hidden File Input */}
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          onChange={handleImageChange} 
-          accept="image/*" 
-          className="hidden" 
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleImageChange}
+          accept="image/*"
+          className="hidden"
         />
       </div>
 
@@ -108,7 +134,10 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           />
         ) : (
           <span
-            onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsEditing(true);
+            }}
             style={{ cursor: 'pointer', borderBottom: '1px dashed #333', color: 'white' }}
           >
             {text}
@@ -130,7 +159,10 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           />
         ) : (
           <span
-            onClick={(e) => { e.stopPropagation(); setIsEditingSecond(true); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsEditingSecond(true);
+            }}
             style={{ cursor: 'pointer', borderBottom: '1px dashed #333', color: 'white' }}
           >
             {secondText}
@@ -152,7 +184,10 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           />
         ) : (
           <span
-            onClick={(e) => { e.stopPropagation(); setIsEditingThird(true); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsEditingThird(true);
+            }}
             style={{ cursor: 'pointer', borderBottom: '1px dashed #333', color: 'white' }}
           >
             {thirdText}
