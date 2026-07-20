@@ -47,15 +47,18 @@ export default function App() {
 
   // CLEANUP UTIL: Formats active tasks neatly for JSON writing
   const getCleanExportData = () => {
-    return tasks.map((task) => ({
-      id: task.id,
-      status: task.status,
-      image: task.image ?? "",
-      text: task.text ?? "Name",
-      secondText: task.secondText ?? "Title",
-      thirdText: task.thirdText ?? "Questions",
-    }));
-  };
+  return tasks.map((task) => ({
+    id: task.id,
+    status: task.status,
+    image: task.image ?? "",
+    text: task.text ?? "Name",
+    secondText: task.secondText ?? "Title",
+    // Ensures fallback data follows the array pattern
+    thirdText: Array.isArray(task.thirdText) 
+      ? task.thirdText 
+      : (task.thirdText ? [task.thirdText] : ["Questions"]),
+  }));
+};
 
   // CORE UPDATE: Saves directly to the system JSON file
   const handleSaveAllCards = async () => {
