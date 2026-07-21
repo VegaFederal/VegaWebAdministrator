@@ -18,13 +18,18 @@ export default function App() {
   const [fileHandle, setFileHandle] = useState(null);
 
   function addTaskToFirstColumn() {
-    const newTask = { 
-      id: String(Date.now()), 
-      status: '1', 
-      image: "", 
-      text: "Name", 
-      secondText: "Title", 
-      thirdText: "Questions" 
+    // Find the highest existing ID and increment it by 1
+    const nextId = tasks.length > 0 
+      ? Math.max(...tasks.map(task => Number(task.id) || 0)) + 1 
+      : 1;
+
+    const newTask = {
+      id: String(nextId),
+      status: '1',
+      image: "",
+      text: "Name",
+      secondText: "Title",
+      thirdText: "Questions"
     };
     setTasks(prevTasks => [...prevTasks, newTask]);
   }
@@ -34,31 +39,34 @@ export default function App() {
   }
 
   function updateTask(taskId, updatedTask) {
-    setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? updatedTask : task)) );
+    setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? updatedTask : task))
+    );
   }
 
   function handleDragEnd(event) {
     const { active, over } = event;
     if (!over) return;
+
     const taskId = active.id;
     const newStatus = over.id;
-    setTasks(prevTasks => prevTasks.map((task) => task.id === taskId ? { ...task, status: newStatus } : task ));
+
+    setTasks(prevTasks => prevTasks.map((task) =>
+      task.id === taskId ? { ...task, status: newStatus } : task
+    ));
   }
 
   // CLEANUP UTIL: Formats active tasks neatly for JSON writing
   const getCleanExportData = () => {
-  return tasks.map((task) => ({
-    id: task.id,
-    status: task.status,
-    image: task.image ?? "",
-    text: task.text ?? "Name",
-    secondText: task.secondText ?? "Title",
-    // Ensures fallback data follows the array pattern
-    thirdText: Array.isArray(task.thirdText) 
-      ? task.thirdText 
-      : (task.thirdText ? [task.thirdText] : ["Questions"]),
-  }));
-};
+    return tasks.map((task) => ({
+      id: task.id,
+      status: task.status,
+      image: task.image ?? "",
+      text: task.text ?? "Name",
+      secondText: task.secondText ?? "Title",
+      // Ensures fallback data follows the array pattern
+      thirdText: Array.isArray(task.thirdText) ? task.thirdText : (task.thirdText ? [task.thirdText] : ["Questions"]),
+    }));
+  };
 
   // CORE UPDATE: Saves directly to the system JSON file
   const handleSaveAllCards = async () => {
@@ -68,7 +76,7 @@ export default function App() {
     if ('showSaveFilePicker' in window) {
       try {
         let currentHandle = fileHandle;
-        
+
         // If we don't have a linked file context yet, prompt user to select/replace their json file
         if (!currentHandle) {
           const options = {
@@ -121,7 +129,7 @@ export default function App() {
         if (Array.isArray(parsedData)) {
           setTasks(parsedData.map(t => ({ ...t, status: t.status ?? '1' })));
           // Reset file handle on manual non-API upload streams
-          setFileHandle(null); 
+          setFileHandle(null);
         } else {
           alert("Invalid file structure.");
         }
@@ -139,25 +147,21 @@ export default function App() {
         <button onClick={addTaskToFirstColumn} className="bg-neutral-800 hover:bg-neutral-700 text-white font-bold py-2 px-4 rounded shadow transition-colors cursor-pointer">
           + Add Task
         </button>
-        
         <button onClick={handleSaveAllCards} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded shadow transition-colors cursor-pointer">
           Save All Cards Data
         </button>
-
-        
-
         <input type="file" ref={fileInputRef} onChange={handleUploadJson} accept=".json" className="hidden" />
       </div>
 
       <div className="flex gap-8">
         <DndContext onDragEnd={handleDragEnd}>
           {COLUMNS.map((column) => (
-            <Column 
-              key={column.id} 
-              column={column} 
-              tasks={tasks.filter((task) => task.status === column.id)} 
-              onDeleteTask={deleteTask} 
-              onUpdateTask={updateTask} 
+            <Column
+              key={column.id}
+              column={column}
+              tasks={tasks.filter((task) => task.status === column.id)}
+              onDeleteTask={deleteTask}
+              onUpdateTask={updateTask}
             />
           ))}
         </DndContext>
