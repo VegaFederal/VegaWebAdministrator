@@ -19,18 +19,18 @@ export default function App() {
 
   function addTaskToFirstColumn() {
     // Find the highest existing ID and increment it by 1
-    const nextId = tasks.length > 0 
-      ? Math.max(...tasks.map(task => Number(task.id) || 0)) + 1 
-      : 1;
-
+    const nextId = tasks.length > 0 ? Math.max(...tasks.map(task => Number(task.id) || 0)) + 1 : 1;
+    
     const newTask = {
       id: String(nextId),
       status: '1',
       image: "",
       text: "Name",
       secondText: "Title",
-      thirdText: "Questions"
+      thirdText: "Questions",
+      veteranLogo: null // NEW: Defaults to null for fresh task creations
     };
+    
     setTasks(prevTasks => [...prevTasks, newTask]);
   }
 
@@ -39,8 +39,7 @@ export default function App() {
   }
 
   function updateTask(taskId, updatedTask) {
-    setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? updatedTask : task))
-    );
+    setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? updatedTask : task)) );
   }
 
   function handleDragEnd(event) {
@@ -50,9 +49,7 @@ export default function App() {
     const taskId = active.id;
     const newStatus = over.id;
 
-    setTasks(prevTasks => prevTasks.map((task) =>
-      task.id === taskId ? { ...task, status: newStatus } : task
-    ));
+    setTasks(prevTasks => prevTasks.map((task) => task.id === taskId ? { ...task, status: newStatus } : task ));
   }
 
   // CLEANUP UTIL: Formats active tasks neatly for JSON writing
@@ -65,6 +62,7 @@ export default function App() {
       secondText: task.secondText ?? "Title",
       // Ensures fallback data follows the array pattern
       thirdText: Array.isArray(task.thirdText) ? task.thirdText : (task.thirdText ? [task.thirdText] : ["Questions"]),
+      veteranLogo: task.veteranLogo ?? null // NEW: Cleans and serializes custom status properties safely
     }));
   };
 
@@ -76,7 +74,7 @@ export default function App() {
     if ('showSaveFilePicker' in window) {
       try {
         let currentHandle = fileHandle;
-
+        
         // If we don't have a linked file context yet, prompt user to select/replace their json file
         if (!currentHandle) {
           const options = {
@@ -127,7 +125,11 @@ export default function App() {
       try {
         const parsedData = JSON.parse(event.target.result);
         if (Array.isArray(parsedData)) {
-          setTasks(parsedData.map(t => ({ ...t, status: t.status ?? '1' })));
+          setTasks(parsedData.map(t => ({ 
+            ...t, 
+            status: t.status ?? '1',
+            veteranLogo: t.veteranLogo ?? null // NEW: Ensures dynamic file parses safely support null defaults
+          })));
           // Reset file handle on manual non-API upload streams
           setFileHandle(null);
         } else {

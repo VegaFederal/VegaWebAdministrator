@@ -18,11 +18,11 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   const text = task.text ?? "Name";
   const secondText = task.secondText ?? "Title";
   
+  // NEW: Fallback for veteranLogo selector (null, "vetArmy", or "vetNavy")
+  const veteranLogo = task.veteranLogo ?? null;
+
   // CORE CHANGE: Handle both Array and String types for thirdText
-  const thirdTextArray = Array.isArray(task.thirdText) 
-    ? task.thirdText 
-    : (task.thirdText ? [task.thirdText] : ["Questions"]);
-  
+  const thirdTextArray = Array.isArray(task.thirdText) ? task.thirdText : (task.thirdText ? [task.thirdText] : ["Questions"]);
   const cardImage = (task.image && task.image !== "") ? task.image : defaultImage;
 
   const style = transform ? {
@@ -56,20 +56,22 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   };
 
   const handleSaveToJson = (e) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
+
     const exportData = {
       id: task.id,
       status: task.status ?? "1",
       image: cardImage,
       text: text,
       secondText: secondText,
-      thirdText: thirdTextArray, // Saves natively as a true array
+      thirdText: thirdTextArray, 
+      veteranLogo: veteranLogo // NEW: Included in the exported JSON file structure
     };
 
     const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
       JSON.stringify([exportData], null, 2)
     )}`;
-    
+
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', jsonString);
     downloadAnchor.setAttribute('download', `task-card-${task.id}.json`);
@@ -80,10 +82,14 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
 
   return (
     <div ref={setNodeRef} {...attributes} className="relative rounded-lg bg-neutral-700 p-4 shadow-sm hover:shadow-md transition-shadow" style={style}>
+      
       {/* DELETE BUTTON */}
-      <button 
-        onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} 
-        className="absolute top-2 right-2 text-neutral-400 hover:text-red-500 font-bold px-2 py-0.5 rounded transition-colors text-sm z-10" 
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(task.id);
+        }}
+        className="absolute top-2 right-2 text-neutral-400 hover:text-red-500 font-bold px-2 py-0.5 rounded transition-colors text-sm z-10"
         title="Delete task"
       >
         ✕
@@ -101,16 +107,40 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
             Change Photo
           </button>
         </div>
-
         <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" className="hidden" />
+      </div>
+
+      {/* NEW: VETERAN LOGO SELECTOR DROPDOWN */}
+      <div style={{ padding: '0px 20px 10px 20px' }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+        <label className="block text-neutral-400 text-xs mb-1 font-semibold">Veteran Status:</label>
+        <select 
+          value={veteranLogo ?? ""} 
+          onChange={(e) => handleUpdate('veteranLogo', e.target.value === "" ? null : e.target.value)}
+          className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none focus:border-neutral-400"
+        >
+          <option value="">None (Null)</option>
+          <option value="vetArmy">Army</option>
+          <option value="vetNavy">Navy</option>
+        </select>
       </div>
 
       {/* FIRST EDITABLE TEXT BOX */}
       <div style={{ padding: '10px 20px' }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
         {isEditing ? (
-          <input type="text" value={text} onChange={(e) => handleUpdate('text', e.target.value)} onBlur={() => setIsEditing(false)} onKeyDown={(e) => e.key === 'Enter' && setIsEditing(false)} autoFocus className="text-black p-1 rounded w-full" />
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => handleUpdate('text', e.target.value)}
+            onBlur={() => setIsEditing(false)}
+            onKeyDown={(e) => e.key === 'Enter' && setIsEditing(false)}
+            autoFocus
+            className="text-black p-1 rounded w-full"
+          />
         ) : (
-          <span onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} style={{ cursor: 'pointer', borderBottom: '1px dashed #555', color: 'white' }}>
+          <span
+            onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+            style={{ cursor: 'pointer', borderBottom: '1px dashed #555', color: 'white' }}
+          >
             {text}
           </span>
         )}
@@ -119,9 +149,20 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
       {/* SECOND EDITABLE TEXT BOX */}
       <div style={{ padding: '10px 20px' }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
         {isEditingSecond ? (
-          <input type="text" value={secondText} onChange={(e) => handleUpdate('secondText', e.target.value)} onBlur={() => setIsEditingSecond(false)} onKeyDown={(e) => e.key === 'Enter' && setIsEditingSecond(false)} autoFocus className="text-black p-1 rounded w-full" />
+          <input
+            type="text"
+            value={secondText}
+            onChange={(e) => handleUpdate('secondText', e.target.value)}
+            onBlur={() => setIsEditingSecond(false)}
+            onKeyDown={(e) => e.key === 'Enter' && setIsEditingSecond(false)}
+            autoFocus
+            className="text-black p-1 rounded w-full"
+          />
         ) : (
-          <span onClick={(e) => { e.stopPropagation(); setIsEditingSecond(true); }} style={{ cursor: 'pointer', borderBottom: '1px dashed #555', color: 'white' }}>
+          <span
+            onClick={(e) => { e.stopPropagation(); setIsEditingSecond(true); }}
+            style={{ cursor: 'pointer', borderBottom: '1px dashed #555', color: 'white' }}
+          >
             {secondText}
           </span>
         )}
@@ -130,18 +171,18 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
       {/* THIRD EDITABLE BOX: TEXTAREA LINE-BY-LINE ARRAY HANDLING */}
       <div style={{ padding: '10px 20px' }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
         {isEditingThird ? (
-          <textarea 
-            defaultValue={thirdTextArray.join('\n')} 
+          <textarea
+            defaultValue={thirdTextArray.join('\n')}
             onBlur={(e) => {
               handleThirdTextUpdate(e.target.value);
               setIsEditingThird(false);
             }}
-            autoFocus 
-            className="text-black p-1 rounded w-full h-24 font-sans text-sm resize-none" 
+            autoFocus
+            className="text-black p-1 rounded w-full h-24 font-sans text-sm resize-none"
           />
         ) : (
-          <div 
-            onClick={(e) => { e.stopPropagation(); setIsEditingThird(true); }} 
+          <div
+            onClick={(e) => { e.stopPropagation(); setIsEditingThird(true); }}
             className="cursor-pointer border border-dashed border-neutral-500 rounded p-2 text-left bg-neutral-800 text-xs min-h-[40px]"
           >
             <ul className="list-disc pl-4 text-neutral-200">
@@ -152,6 +193,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           </div>
         )}
       </div>
+
     </div>
   );
 }
