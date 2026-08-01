@@ -27,7 +27,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up environment
         run: echo "Setting up test environment"
       - name: Run tests
@@ -37,7 +37,7 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -126,7 +126,7 @@ jobs:
     if: (github.event_name == 'push' && github.event.commits[0] != null) || (github.event.inputs.action == 'deploy')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -230,10 +230,21 @@ jobs:
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build website
+        run: npm run build
+
       - name: Upload website files
         run: |
           BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text)
-          aws s3 sync src/ s3://$BUCKET_NAME/ --exclude "*" --include "*.html" --include "*.css" --include "*.js"
+          aws s3 sync dist/ s3://$BUCKET_NAME/ --delete
 
       - name: Invalidate CloudFront cache
         run: |
@@ -253,10 +264,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
@@ -354,22 +365,20 @@ jobs:
           capabilities: "CAPABILITY_NAMED_IAM"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '24'
 
       - name: Install dependencies
         run: npm ci
-        working-directory: ./src
-      
+
       - name: Build website
         run: npm run build
-        working-directory: ./src
 
       - name: Upload website files
         run: |
           BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text)
-          aws s3 sync src/dist/ s3://$BUCKET_NAME/
+          aws s3 sync dist/ s3://$BUCKET_NAME/
 
       - name: Invalidate CloudFront cache
         run: |
@@ -387,7 +396,7 @@ jobs:
     if: github.event.inputs.action == 'cleanup'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
