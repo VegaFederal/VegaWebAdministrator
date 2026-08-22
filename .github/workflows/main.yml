@@ -238,6 +238,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Resolve API endpoint for frontend build
+        run: |
+          API_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
+          echo "API_URL=$API_URL" >> $GITHUB_ENV
+          echo "VITE_API_URL=$API_URL" >> .env.production
+
       - name: Build website
         run: npm run build
 
@@ -254,7 +260,6 @@ jobs:
       - name: Get CloudFront URL
         run: |
           CF_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" --output text)
-          API_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "Branch: ${{ env.BRANCH_NAME }} deployed as environment: ${{ env.ENVIRONMENT }}"
           echo "Your website is available at: https://$CF_URL"
           echo "Team members API: $API_URL"
@@ -372,6 +377,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Resolve API endpoint for frontend build
+        run: |
+          API_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
+          echo "API_URL=$API_URL" >> $GITHUB_ENV
+          echo "VITE_API_URL=$API_URL" >> .env.production
+
       - name: Build website
         run: npm run build
 
@@ -388,7 +399,6 @@ jobs:
       - name: Get CloudFront URL
         run: |
           CF_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteUrl'].OutputValue" --output text)
-          API_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "Production deployment completed!"
           echo "Your production website is available at: https://$CF_URL"
           echo "Team members API: $API_URL"

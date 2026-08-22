@@ -15,14 +15,14 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   const [isEditingThird, setIsEditingThird] = useState(false);
 
   // Field fallbacks
-  const text = task.text ?? "Name";
-  const secondText = task.secondText ?? "Title";
-  
+  const text = task.name ?? "Name";
+  const secondText = task.title ?? "Title";
+
   // NEW: Fallback for veteranLogo selector (null, "vetArmy", or "vetNavy")
   const veteranLogo = task.veteranLogo ?? null;
 
-  // CORE CHANGE: Handle both Array and String types for thirdText
-  const thirdTextArray = Array.isArray(task.thirdText) ? task.thirdText : (task.thirdText ? [task.thirdText] : ["Questions"]);
+  // CORE CHANGE: Handle both Array and String types for details
+  const thirdTextArray = Array.isArray(task.details) ? task.details : (task.details ? [task.details] : ["Questions"]);
   const cardImage = (task.image && task.image !== "") ? task.image : defaultImage;
 
   const style = transform ? {
@@ -36,7 +36,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   // Convert multi-line string text back to a clean JSON array
   const handleThirdTextUpdate = (textValue) => {
     const linesArray = textValue.split('\n').map(line => line.trim()).filter(line => line !== "");
-    handleUpdate('thirdText', linesArray.length > 0 ? linesArray : ["Questions"]);
+    handleUpdate('details', linesArray.length > 0 ? linesArray : ["Questions"]);
   };
 
   const handleImageChange = (e) => {
@@ -62,9 +62,9 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
       id: task.id,
       status: task.status ?? "1",
       image: cardImage,
-      text: text,
-      secondText: secondText,
-      thirdText: thirdTextArray, 
+      name: text,
+      title: secondText,
+      details: thirdTextArray,
       veteranLogo: veteranLogo // NEW: Included in the exported JSON file structure
     };
 
@@ -130,7 +130,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           <input
             type="text"
             value={text}
-            onChange={(e) => handleUpdate('text', e.target.value)}
+            onChange={(e) => handleUpdate('name', e.target.value)}
             onBlur={() => setIsEditing(false)}
             onKeyDown={(e) => e.key === 'Enter' && setIsEditing(false)}
             autoFocus
@@ -152,7 +152,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           <input
             type="text"
             value={secondText}
-            onChange={(e) => handleUpdate('secondText', e.target.value)}
+            onChange={(e) => handleUpdate('title', e.target.value)}
             onBlur={() => setIsEditingSecond(false)}
             onKeyDown={(e) => e.key === 'Enter' && setIsEditingSecond(false)}
             autoFocus
