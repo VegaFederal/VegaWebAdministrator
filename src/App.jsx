@@ -188,10 +188,10 @@ export default function App() {
   return (
     <div className="p-4">
       <div className="flex gap-4 mb-4 items-center">
-        <button onClick={addTask} className="bg-neutral-800 hover:bg-neutral-700 text-white font-bold py-2 px-4 rounded shadow transition-colors cursor-pointer">
+        <button onClick={addTask} className="cursor-pointer">
           + Add Task
         </button>
-        <button onClick={handleSaveAllCards} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded shadow transition-colors cursor-pointer">
+        <button onClick={handleSaveAllCards} className="cursor-pointer">
           Save All Cards Data
         </button>
         <input type="file" ref={fileInputRef} onChange={handleUploadJson} accept=".json" className="hidden" />

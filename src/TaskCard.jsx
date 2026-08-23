@@ -92,7 +92,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           e.stopPropagation();
           onDelete(task.id);
         }}
-        className="absolute top-2 right-2 text-neutral-400 hover:text-red-500 font-bold px-2 py-0.5 rounded transition-colors text-sm z-10"
+        className="absolute top-2 right-2 border-0 p-1 text-neutral-400 hover:text-vega-red transition-colors text-sm z-10 cursor-pointer"
         title="Delete task"
       >
         ✕
@@ -106,7 +106,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
 
         {/* BUTTON BAR FOR ACTION ITEMS */}
         <div className="flex gap-2" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-          <button onClick={triggerFileInput} className="bg-neutral-600 hover:bg-neutral-500 text-white text-xs font-semibold py-1.5 px-3 rounded transition-colors cursor-pointer">
+          <button onClick={triggerFileInput} className="text-xs py-1.5 px-3 cursor-pointer">
             Change Photo
           </button>
         </div>
@@ -119,7 +119,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
         <select 
           value={veteranLogo ?? ""} 
           onChange={(e) => handleUpdate('veteranLogo', e.target.value === "" ? null : e.target.value)}
-          className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none focus:border-neutral-400"
+          className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none focus:border-primary-500"
         >
           <option value="">None (Null)</option>
           <option value="vetArmy">Army</option>

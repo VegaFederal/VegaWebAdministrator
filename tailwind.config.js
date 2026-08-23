@@ -6,8 +6,13 @@ export default {
     extend: {
       colors: {
         primary: {
-          500: '#faf5cf',
-          700: '#a37d54',
+          500: '#DD004A',
+          700: '#a30039',
+        },
+        vega: {
+          blue: '#001837',
+          red: '#DD004A',
+          pink: '#FF87AC',
         },
         grayscale: {
           200: '#e6e6e6',
