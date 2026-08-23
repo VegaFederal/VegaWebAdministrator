@@ -1,22 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Column } from './Column.jsx';
-import { DndContext } from '@dnd-kit/core';
+import { TaskCard } from './TaskCard.jsx';
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import { SortableContext, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
 import React, { useRef } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL;
-
-const COLUMNS = [
-  { id: '1', title: '1' },
-  { id: '2', title: '2' },
-  { id: '3', title: '3' },
-  { id: '4', title: '4' },
-];
 
 // Maps a DynamoDB team-member record onto the board's card shape
 function memberToTask(member) {
   return {
     id: String(member.id),
-    status: '1',
     image: member.image ?? "",
     name: member.name ?? "Name",
     title: member.title ?? "Title",
@@ -51,20 +44,21 @@ export default function App() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  function addTaskToFirstColumn() {
+  function addTask() {
     // Find the highest existing ID and increment it by 1
     const nextId = tasks.length > 0 ? Math.max(...tasks.map(task => Number(task.id) || 0)) + 1 : 1;
-    
+    const nextOrder = tasks.length > 0 ? Math.max(...tasks.map(task => task.memberOrder ?? 0)) + 1 : 1;
+
     const newTask = {
       id: String(nextId),
-      status: '1',
       image: "",
       name: "Name",
       title: "Title",
       details: ["Questions"],
-      veteranLogo: null // NEW: Defaults to null for fresh task creations
+      veteranLogo: null, // NEW: Defaults to null for fresh task creations
+      memberOrder: nextOrder,
     };
-    
+
     setTasks(prevTasks => [...prevTasks, newTask]);
   }
 
@@ -76,27 +70,31 @@ export default function App() {
     setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? updatedTask : task)) );
   }
 
+  // Reorders tasks by drag position and renumbers memberOrder to match
   function handleDragEnd(event) {
     const { active, over } = event;
-    if (!over) return;
+    if (!over || active.id === over.id) return;
 
-    const taskId = active.id;
-    const newStatus = over.id;
-
-    setTasks(prevTasks => prevTasks.map((task) => task.id === taskId ? { ...task, status: newStatus } : task ));
+    setTasks(prevTasks => {
+      const sorted = [...prevTasks].sort((a, b) => a.memberOrder - b.memberOrder);
+      const oldIndex = sorted.findIndex(task => task.id === active.id);
+      const newIndex = sorted.findIndex(task => task.id === over.id);
+      const reordered = arrayMove(sorted, oldIndex, newIndex);
+      return reordered.map((task, index) => ({ ...task, memberOrder: index + 1 }));
+    });
   }
 
   // CLEANUP UTIL: Formats active tasks neatly for JSON writing
   const getCleanExportData = () => {
     return tasks.map((task) => ({
       id: task.id,
-      status: task.status,
+      memberOrder: task.memberOrder,
       image: task.image ?? "",
       name: task.name ?? "Name",
       title: task.title ?? "Title",
       // Ensures fallback data follows the array pattern
       details: Array.isArray(task.details) ? task.details : (task.details ? [task.details] : ["Questions"]),
-      veteranLogo: task.veteranLogo ?? null // NEW: Cleans and serializes custom status properties safely
+      veteranLogo: task.veteranLogo ?? null
     }));
   };
 
@@ -159,9 +157,9 @@ export default function App() {
       try {
         const parsedData = JSON.parse(event.target.result);
         if (Array.isArray(parsedData)) {
-          setTasks(parsedData.map(t => ({ 
-            ...t, 
-            status: t.status ?? '1',
+          setTasks(parsedData.map((t, index) => ({
+            ...t,
+            memberOrder: t.memberOrder ?? index + 1,
             veteranLogo: t.veteranLogo ?? null // NEW: Ensures dynamic file parses safely support null defaults
           })));
           // Reset file handle on manual non-API upload streams
@@ -185,10 +183,12 @@ export default function App() {
     return <div className="p-4 text-red-400">Failed to load team members: {loadError}</div>;
   }
 
+  const sortedTasks = [...tasks].sort((a, b) => a.memberOrder - b.memberOrder);
+
   return (
     <div className="p-4">
       <div className="flex gap-4 mb-4 items-center">
-        <button onClick={addTaskToFirstColumn} className="bg-neutral-800 hover:bg-neutral-700 text-white font-bold py-2 px-4 rounded shadow transition-colors cursor-pointer">
+        <button onClick={addTask} className="bg-neutral-800 hover:bg-neutral-700 text-white font-bold py-2 px-4 rounded shadow transition-colors cursor-pointer">
           + Add Task
         </button>
         <button onClick={handleSaveAllCards} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded shadow transition-colors cursor-pointer">
@@ -197,19 +197,20 @@ export default function App() {
         <input type="file" ref={fileInputRef} onChange={handleUploadJson} accept=".json" className="hidden" />
       </div>
 
-      <div className="flex gap-8">
-        <DndContext onDragEnd={handleDragEnd}>
-          {COLUMNS.map((column) => (
-            <Column
-              key={column.id}
-              column={column}
-              tasks={tasks.filter((task) => task.status === column.id)}
-              onDeleteTask={deleteTask}
-              onUpdateTask={updateTask}
-            />
-          ))}
-        </DndContext>
-      </div>
+      <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={sortedTasks.map(task => task.id)} strategy={rectSortingStrategy}>
+          <div className="flex flex-wrap gap-4">
+            {sortedTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onDelete={deleteTask}
+                onUpdateTask={updateTask}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }
