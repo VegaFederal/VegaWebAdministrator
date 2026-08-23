@@ -199,7 +199,7 @@ export default function App() {
 
       <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={sortedTasks.map(task => task.id)} strategy={rectSortingStrategy}>
-          <div className="flex flex-wrap gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {sortedTasks.map((task) => (
               <TaskCard
                 key={task.id}
