@@ -55,7 +55,7 @@ export default function App() {
       name: "Name",
       title: "Title",
       details: ["Questions"],
-      veteranLogo: null, // NEW: Defaults to null for fresh task creations
+      veteranLogo: null,
       memberOrder: nextOrder,
     };
 

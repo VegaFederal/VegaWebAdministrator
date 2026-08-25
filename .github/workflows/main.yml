@@ -238,7 +238,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Resolve API endpoint for frontend build
+      - name: Resolve API endpoint
         run: |
           API_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "API_URL=$API_URL" >> $GITHUB_ENV
@@ -377,7 +377,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Resolve API endpoint for frontend build
+      - name: Resolve API endpoint
         run: |
           API_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "API_URL=$API_URL" >> $GITHUB_ENV
