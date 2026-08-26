@@ -1,36 +1,64 @@
-import { useState } from 'react';
-import { Column } from './Column.jsx';
-import { DndContext } from '@dnd-kit/core';
+import { useState, useEffect } from 'react';
+import { TaskCard } from './TaskCard.jsx';
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import { SortableContext, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
 import React, { useRef } from 'react';
-import savedTasks from './cards-data.json';
 
-const COLUMNS = [
-  { id: '1', title: '1' },
-  { id: '2', title: '2' },
-  { id: '3', title: '3' },
-  { id: '4', title: '4' },
-];
+const API_URL = import.meta.env.VITE_API_URL;
+
+// Maps a DynamoDB team-member record onto the board's card shape
+function memberToTask(member) {
+  return {
+    id: String(member.id),
+    image: member.image ?? "",
+    name: member.name ?? "Name",
+    title: member.title ?? "Title",
+    details: Array.isArray(member.details) ? member.details : (member.details ? [member.details] : ["Questions"]),
+    veteranLogo: member.veteranLogo ?? null,
+    memberOrder: member.memberOrder ?? 0,
+  };
+}
 
 export default function App() {
-  const [tasks, setTasks] = useState(savedTasks);
+  const [tasks, setTasks] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const fileInputRef = useRef(null);
   // Keeps track of the active file reference for seamless saving
   const [fileHandle, setFileHandle] = useState(null);
 
-  function addTaskToFirstColumn() {
+  useEffect(() => {
+    if (!API_URL) {
+      setLoadError("VITE_API_URL is not configured.");
+      setIsLoading(false);
+      return;
+    }
+
+    fetch(API_URL)
+      .then((res) => {
+        if (!res.ok) throw new Error(`API returned ${res.status}`);
+        return res.json();
+      })
+      .then((members) => setTasks(members.map(memberToTask)))
+      .catch((err) => setLoadError(err.message))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  function addTask() {
     // Find the highest existing ID and increment it by 1
     const nextId = tasks.length > 0 ? Math.max(...tasks.map(task => Number(task.id) || 0)) + 1 : 1;
-    
+    const nextOrder = tasks.length > 0 ? Math.max(...tasks.map(task => task.memberOrder ?? 0)) + 1 : 1;
+
     const newTask = {
       id: String(nextId),
-      status: '1',
       image: "",
-      text: "Name",
-      secondText: "Title",
-      thirdText: "Questions",
-      veteranLogo: null // NEW: Defaults to null for fresh task creations
+      name: "Name",
+      title: "Title",
+      details: ["Questions"],
+      veteranLogo: null,
+      memberOrder: nextOrder,
     };
-    
+
     setTasks(prevTasks => [...prevTasks, newTask]);
   }
 
@@ -42,27 +70,31 @@ export default function App() {
     setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? updatedTask : task)) );
   }
 
+  // Reorders tasks by drag position and renumbers memberOrder to match
   function handleDragEnd(event) {
     const { active, over } = event;
-    if (!over) return;
+    if (!over || active.id === over.id) return;
 
-    const taskId = active.id;
-    const newStatus = over.id;
-
-    setTasks(prevTasks => prevTasks.map((task) => task.id === taskId ? { ...task, status: newStatus } : task ));
+    setTasks(prevTasks => {
+      const sorted = [...prevTasks].sort((a, b) => a.memberOrder - b.memberOrder);
+      const oldIndex = sorted.findIndex(task => task.id === active.id);
+      const newIndex = sorted.findIndex(task => task.id === over.id);
+      const reordered = arrayMove(sorted, oldIndex, newIndex);
+      return reordered.map((task, index) => ({ ...task, memberOrder: index + 1 }));
+    });
   }
 
   // CLEANUP UTIL: Formats active tasks neatly for JSON writing
   const getCleanExportData = () => {
     return tasks.map((task) => ({
       id: task.id,
-      status: task.status,
+      memberOrder: task.memberOrder,
       image: task.image ?? "",
-      text: task.text ?? "Name",
-      secondText: task.secondText ?? "Title",
+      name: task.name ?? "Name",
+      title: task.title ?? "Title",
       // Ensures fallback data follows the array pattern
-      thirdText: Array.isArray(task.thirdText) ? task.thirdText : (task.thirdText ? [task.thirdText] : ["Questions"]),
-      veteranLogo: task.veteranLogo ?? null // NEW: Cleans and serializes custom status properties safely
+      details: Array.isArray(task.details) ? task.details : (task.details ? [task.details] : ["Questions"]),
+      veteranLogo: task.veteranLogo ?? null
     }));
   };
 
@@ -125,9 +157,9 @@ export default function App() {
       try {
         const parsedData = JSON.parse(event.target.result);
         if (Array.isArray(parsedData)) {
-          setTasks(parsedData.map(t => ({ 
-            ...t, 
-            status: t.status ?? '1',
+          setTasks(parsedData.map((t, index) => ({
+            ...t,
+            memberOrder: t.memberOrder ?? index + 1,
             veteranLogo: t.veteranLogo ?? null // NEW: Ensures dynamic file parses safely support null defaults
           })));
           // Reset file handle on manual non-API upload streams
@@ -143,31 +175,42 @@ export default function App() {
     e.target.value = '';
   };
 
+  if (isLoading) {
+    return <div className="p-4 text-white">Loading team members…</div>;
+  }
+
+  if (loadError) {
+    return <div className="p-4 text-red-400">Failed to load team members: {loadError}</div>;
+  }
+
+  const sortedTasks = [...tasks].sort((a, b) => a.memberOrder - b.memberOrder);
+
   return (
     <div className="p-4">
       <div className="flex gap-4 mb-4 items-center">
-        <button onClick={addTaskToFirstColumn} className="bg-neutral-800 hover:bg-neutral-700 text-white font-bold py-2 px-4 rounded shadow transition-colors cursor-pointer">
+        <button onClick={addTask} className="cursor-pointer">
           + Add Task
         </button>
-        <button onClick={handleSaveAllCards} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded shadow transition-colors cursor-pointer">
+        <button onClick={handleSaveAllCards} className="cursor-pointer">
           Save All Cards Data
         </button>
         <input type="file" ref={fileInputRef} onChange={handleUploadJson} accept=".json" className="hidden" />
       </div>
 
-      <div className="flex gap-8">
-        <DndContext onDragEnd={handleDragEnd}>
-          {COLUMNS.map((column) => (
-            <Column
-              key={column.id}
-              column={column}
-              tasks={tasks.filter((task) => task.status === column.id)}
-              onDeleteTask={deleteTask}
-              onUpdateTask={updateTask}
-            />
-          ))}
-        </DndContext>
-      </div>
+      <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={sortedTasks.map(task => task.id)} strategy={rectSortingStrategy}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {sortedTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onDelete={deleteTask}
+                onUpdateTask={updateTask}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }

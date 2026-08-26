@@ -1,9 +1,10 @@
-import { useDraggable } from '@dnd-kit/core';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
 import React, { useState, useRef } from 'react';
 
 export function TaskCard({ task, onDelete, onUpdateTask }) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
 
@@ -15,19 +16,21 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   const [isEditingThird, setIsEditingThird] = useState(false);
 
   // Field fallbacks
-  const text = task.text ?? "Name";
-  const secondText = task.secondText ?? "Title";
-  
+  const text = task.name ?? "Name";
+  const secondText = task.title ?? "Title";
+
   // NEW: Fallback for veteranLogo selector (null, "vetArmy", or "vetNavy")
   const veteranLogo = task.veteranLogo ?? null;
 
-  // CORE CHANGE: Handle both Array and String types for thirdText
-  const thirdTextArray = Array.isArray(task.thirdText) ? task.thirdText : (task.thirdText ? [task.thirdText] : ["Questions"]);
+  // CORE CHANGE: Handle both Array and String types for details
+  const thirdTextArray = Array.isArray(task.details) ? task.details : (task.details ? [task.details] : ["Questions"]);
   const cardImage = (task.image && task.image !== "") ? task.image : defaultImage;
 
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : undefined;
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
 
   const handleUpdate = (key, value) => {
     onUpdateTask(task.id, { ...task, [key]: value });
@@ -36,7 +39,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   // Convert multi-line string text back to a clean JSON array
   const handleThirdTextUpdate = (textValue) => {
     const linesArray = textValue.split('\n').map(line => line.trim()).filter(line => line !== "");
-    handleUpdate('thirdText', linesArray.length > 0 ? linesArray : ["Questions"]);
+    handleUpdate('details', linesArray.length > 0 ? linesArray : ["Questions"]);
   };
 
   const handleImageChange = (e) => {
@@ -62,9 +65,9 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
       id: task.id,
       status: task.status ?? "1",
       image: cardImage,
-      text: text,
-      secondText: secondText,
-      thirdText: thirdTextArray, 
+      name: text,
+      title: secondText,
+      details: thirdTextArray,
       veteranLogo: veteranLogo // NEW: Included in the exported JSON file structure
     };
 
@@ -89,7 +92,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           e.stopPropagation();
           onDelete(task.id);
         }}
-        className="absolute top-2 right-2 text-neutral-400 hover:text-red-500 font-bold px-2 py-0.5 rounded transition-colors text-sm z-10"
+        className="absolute top-2 right-2 border-0 p-1 text-neutral-400 hover:text-vega-red transition-colors text-sm z-10 cursor-pointer"
         title="Delete task"
       >
         ✕
@@ -103,7 +106,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
 
         {/* BUTTON BAR FOR ACTION ITEMS */}
         <div className="flex gap-2" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-          <button onClick={triggerFileInput} className="bg-neutral-600 hover:bg-neutral-500 text-white text-xs font-semibold py-1.5 px-3 rounded transition-colors cursor-pointer">
+          <button onClick={triggerFileInput} className="text-xs py-1.5 px-3 cursor-pointer">
             Change Photo
           </button>
         </div>
@@ -116,7 +119,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
         <select 
           value={veteranLogo ?? ""} 
           onChange={(e) => handleUpdate('veteranLogo', e.target.value === "" ? null : e.target.value)}
-          className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none focus:border-neutral-400"
+          className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none focus:border-primary-500"
         >
           <option value="">None (Null)</option>
           <option value="vetArmy">Army</option>
@@ -130,7 +133,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           <input
             type="text"
             value={text}
-            onChange={(e) => handleUpdate('text', e.target.value)}
+            onChange={(e) => handleUpdate('name', e.target.value)}
             onBlur={() => setIsEditing(false)}
             onKeyDown={(e) => e.key === 'Enter' && setIsEditing(false)}
             autoFocus
@@ -152,7 +155,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           <input
             type="text"
             value={secondText}
-            onChange={(e) => handleUpdate('secondText', e.target.value)}
+            onChange={(e) => handleUpdate('title', e.target.value)}
             onBlur={() => setIsEditingSecond(false)}
             onKeyDown={(e) => e.key === 'Enter' && setIsEditingSecond(false)}
             autoFocus
