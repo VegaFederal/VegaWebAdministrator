@@ -194,6 +194,25 @@ jobs:
           echo "DB_TABLE_NAME=$DB_TABLE_NAME" >> $GITHUB_ENV
           echo "DB_TABLE_ARN=$DB_TABLE_ARN" >> $GITHUB_ENV
 
+      - name: Resolve shared assets
+        run: |
+          ASSETS_STACK_NAME="vega-assets-${{ env.DB_ENVIRONMENT }}"
+          if ! aws cloudformation describe-stacks --stack-name $ASSETS_STACK_NAME 2>/dev/null; then
+            echo "ERROR: Shared assets stack $ASSETS_STACK_NAME not found."
+            echo "The static assets bucket must be created by VegaWebAWS first."
+            exit 1
+          fi
+          ASSETS_BUCKET_NAME=$(aws cloudformation describe-stacks \
+            --stack-name $ASSETS_STACK_NAME \
+            --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" \
+            --output text)
+          if [ -z "$ASSETS_BUCKET_NAME" ] || [ "$ASSETS_BUCKET_NAME" = "None" ]; then
+            echo "ERROR: BucketName output not found on $ASSETS_STACK_NAME"
+            exit 1
+          fi
+          echo "Using shared assets bucket: $ASSETS_BUCKET_NAME"
+          echo "ASSETS_BUCKET_NAME=$ASSETS_BUCKET_NAME" >> $GITHUB_ENV
+
       - name: Create template bucket
         run: |
             TIMESTAMP=$(date +%s)
@@ -226,7 +245,8 @@ jobs:
             TemplateBucket=${{ env.TEMPLATE_BUCKET }},
             DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
             TableName=${{ env.DB_TABLE_NAME }},
-            TableArn=${{ env.DB_TABLE_ARN }}
+            TableArn=${{ env.DB_TABLE_ARN }},
+            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
@@ -331,6 +351,25 @@ jobs:
           echo "DB_TABLE_NAME=$DB_TABLE_NAME" >> $GITHUB_ENV
           echo "DB_TABLE_ARN=$DB_TABLE_ARN" >> $GITHUB_ENV
 
+      - name: Resolve shared assets
+        run: |
+          ASSETS_STACK_NAME="vega-assets-${{ env.DB_ENVIRONMENT }}"
+          if ! aws cloudformation describe-stacks --stack-name $ASSETS_STACK_NAME 2>/dev/null; then
+            echo "ERROR: Shared assets stack $ASSETS_STACK_NAME not found."
+            echo "The static assets bucket must be created by VegaWebAWS first."
+            exit 1
+          fi
+          ASSETS_BUCKET_NAME=$(aws cloudformation describe-stacks \
+            --stack-name $ASSETS_STACK_NAME \
+            --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" \
+            --output text)
+          if [ -z "$ASSETS_BUCKET_NAME" ] || [ "$ASSETS_BUCKET_NAME" = "None" ]; then
+            echo "ERROR: BucketName output not found on $ASSETS_STACK_NAME"
+            exit 1
+          fi
+          echo "Using shared assets bucket: $ASSETS_BUCKET_NAME"
+          echo "ASSETS_BUCKET_NAME=$ASSETS_BUCKET_NAME" >> $GITHUB_ENV
+
       - name: Create template bucket
         run: |
             TIMESTAMP=$(date +%s)
@@ -362,6 +401,7 @@ jobs:
             DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
             TableName=${{ env.DB_TABLE_NAME }},
             TableArn=${{ env.DB_TABLE_ARN }},
+            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
             DomainName=${{ env.DOMAIN_NAME }},
             WwwDomain=${{ env.WWW_DOMAIN }},
             CertificateArn=${{ env.CERTIFICATE_ARN }},

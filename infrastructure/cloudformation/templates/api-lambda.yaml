@@ -15,6 +15,9 @@ Parameters:
   TableArn: # parameter for the DynamoDB table ARN from the dynamodb.yaml file.
     Type: String
     Description: DynamoDB table ARN
+  AssetsBucketName: # parameter for the shared assets S3 bucket from the assets.yaml file.
+    Type: String
+    Description: Shared assets S3 bucket name
   AllowedOrigin:
     Type: String
     Default: ""
@@ -59,6 +62,14 @@ Resources:
                   - dynamodb:UpdateItem
                   - dynamodb:DeleteItem
                 Resource: !Ref TableArn
+        - PolicyName: AssetsBucketWritePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub arn:aws:s3:::${AssetsBucketName}/*
 
   TeamMembersFunction:
     Type: AWS::Lambda::Function
@@ -73,6 +84,7 @@ Resources:
         Variables:
           TABLE_NAME: !Ref TableName
           TABLE_ARN: !Ref TableArn
+          BUCKET_NAME: !Ref AssetsBucketName
           ALLOWED_ORIGIN: !Ref AllowedOrigin
       Code:
         S3Bucket: !Ref DeploymentBucket
