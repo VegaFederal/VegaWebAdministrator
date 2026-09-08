@@ -30,7 +30,7 @@ def handler(event, context):
     if ALLOWED_ORIGIN and origin != ALLOWED_ORIGIN and not referer.startswith(ALLOWED_ORIGIN):
         return {
             "statusCode": 401,
-            "headers": {"Content-Type": "application/json"},
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
             "body": json.dumps({"error": "Forbidden"})
         }
 

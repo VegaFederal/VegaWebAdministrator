@@ -29,6 +29,17 @@ Resources:
     Properties:
       Name: !Sub VegaWebAdmin-TeamMembers-${Environment}
       ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - content-type
 
   TeamMembersIntegration:
     Type: AWS::ApiGatewayV2::Integration
