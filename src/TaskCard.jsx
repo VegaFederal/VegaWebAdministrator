@@ -1,14 +1,33 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
-export function TaskCard({ task, onDelete, onUpdateTask }) {
+export function TaskCard({ task, onDelete, onUpdateTask, shouldFocus }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
 
   const fileInputRef = useRef(null);
+  const cardRef = useRef(null);
+
+  const connectedCardRef = (node) => {
+    setNodeRef(node);
+    cardRef.current = node;
+  };
+
+  useEffect(() => {
+    if (!shouldFocus || !cardRef.current) return;
+
+    cardRef.current.focus({
+      preventScroll: true,
+    });
+
+    cardRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [shouldFocus]);
 
   // UI editing toggles
   const [isEditing, setIsEditing] = useState(false);
@@ -34,6 +53,25 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
 
   const handleUpdate = (key, value) => {
     onUpdateTask(task.id, { ...task, [key]: value });
+  };
+
+  const handleCardClick = (event) => {
+    const clickedControl = event.target.closest(
+      'button, input, textarea, select'
+    );
+
+    if (clickedControl) return;
+
+    cardRef.current?.focus({
+      preventScroll: true,
+    });
+
+    cardRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+
+    
   };
 
   // Convert multi-line string text back to a clean JSON array
@@ -84,7 +122,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   };
 
   return (
-    <div ref={setNodeRef} {...attributes} className="relative rounded-lg bg-neutral-700 p-4 shadow-sm hover:shadow-md transition-shadow" style={style}>
+    <div ref={connectedCardRef} tabIndex={-1} {...attributes} onClick={handleCardClick} className="relative rounded-lg bg-neutral-700 p-4 shadow-sm hover:shadow-md transition-shadow" style={style}>
       
       {/* DELETE BUTTON */}
       <button
@@ -142,7 +180,17 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
         ) : (
           <span
             onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
-            style={{ cursor: 'pointer', borderBottom: '1px dashed #555', color: 'white' }}
+            style={{
+              cursor: 'text',
+              display: 'block',
+              width: '100%',
+              padding: '8px 10px',
+              color: 'white',
+              backgroundColor: '#262626',
+              border: '1px solid #737373',
+              borderRadius: '4px',
+              minHeight: '38px',
+            }}
           >
             {text}
           </span>
@@ -164,7 +212,17 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
         ) : (
           <span
             onClick={(e) => { e.stopPropagation(); setIsEditingSecond(true); }}
-            style={{ cursor: 'pointer', borderBottom: '1px dashed #555', color: 'white' }}
+            style={{
+              cursor: 'text',
+              display: 'block',
+              width: '100%',
+              padding: '8px 10px',
+              color: 'white',
+              backgroundColor: '#262626',
+              border: '1px solid #737373',
+              borderRadius: '4px',
+              minHeight: '38px',
+            }}
           >
             {secondText}
           </span>

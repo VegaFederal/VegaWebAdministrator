@@ -21,6 +21,7 @@ function memberToTask(member) {
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
+  const [focusedTaskId, setFocusedTaskId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const fileInputRef = useRef(null);
@@ -60,6 +61,7 @@ export default function App() {
     };
 
     setTasks(prevTasks => [...prevTasks, newTask]);
+    setFocusedTaskId(newTask.id);
   }
 
   function deleteTask(taskId) {
@@ -189,7 +191,7 @@ export default function App() {
     <div className="p-4">
       <div className="flex gap-4 mb-4 items-center">
         <button onClick={addTask} className="cursor-pointer">
-          + Add Task
+          + Add Card
         </button>
         <button onClick={handleSaveAllCards} className="cursor-pointer">
           Save All Cards Data
@@ -206,6 +208,7 @@ export default function App() {
                 task={task}
                 onDelete={deleteTask}
                 onUpdateTask={updateTask}
+                shouldFocus={task.id === focusedTaskId}
               />
             ))}
           </div>
