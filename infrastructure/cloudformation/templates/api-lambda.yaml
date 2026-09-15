@@ -80,6 +80,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - s3:PutObject
+                  - s3:DeleteObject
                 Resource: !Sub arn:aws:s3:::${AssetsBucketName}/*
 
   TeamMembersFunction:

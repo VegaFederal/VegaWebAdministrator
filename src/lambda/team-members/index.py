@@ -41,7 +41,9 @@ def handler(event, context):
             return get_team_members()
         elif method == 'POST':
             return create_team_member(event)
-        elif method in ('PUT', 'DELETE'):
+        elif method == 'DELETE':
+            return delete_team_member(event)
+        elif method in ('PUT'):
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
@@ -70,6 +72,22 @@ def get_team_members():
         "body": json.dumps(decimal_to_native(members))
     }
 
+
+def delete_team_member(event):
+    body = json.loads(event.get('body') or '{}')
+    id = body.get('id')
+    if not id:
+        return {
+            "statusCode": 400,
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "body": json.dumps({"error": "ID is required"})
+        }
+    table.delete_item(Key={'id': id})
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+        "body": json.dumps({"message": "Team member deleted"})
+    }
 
 def create_team_member(event):
     body = json.loads(event.get('body') or '{}')

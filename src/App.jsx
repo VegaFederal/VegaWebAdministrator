@@ -63,7 +63,19 @@ export default function App() {
     setTasks(prevTasks => [...prevTasks, newTask]);
   }
 
-  function deleteTask(taskId) {
+  async function deleteTask(taskId) {
+    const response = await fetch(API_URL, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: taskId }),
+    });
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+    const deletedMember = await response.json();
+    if (deletedMember.message !== "Team member deleted") {
+      throw new Error(`API returned ${response.status}`);
+    }
     setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
   }
 
