@@ -43,7 +43,7 @@ def handler(event, context):
             return create_team_member(event)
         elif method == 'DELETE':
             return delete_team_member(event)
-        elif method in ('PUT'):
+        elif method == 'PUT':
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
@@ -74,15 +74,30 @@ def get_team_members():
 
 
 def delete_team_member(event):
-    body = json.loads(event.get('body') or '{}')
-    id = body.get('id')
-    if not id:
+    path_params = event.get('pathParameters') or {}
+    member_id = path_params.get('id')
+    if not member_id:
         return {
             "statusCode": 400,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
             "body": json.dumps({"error": "ID is required"})
         }
-    table.delete_item(Key={'id': id})
+
+    item = table.get_item(Key={'id': member_id}).get('Item')
+    if not item:
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "body": json.dumps({"error": "Team member not found"})
+        }
+
+    image_url = item.get('image') or ''
+    if BUCKET_NAME and BUCKET_NAME in image_url and '.amazonaws.com/' in image_url:
+        key = image_url.split('.amazonaws.com/', 1)[1]
+        if key:
+            s3.delete_object(Bucket=BUCKET_NAME, Key=key)
+
+    table.delete_item(Key={'id': member_id})
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},

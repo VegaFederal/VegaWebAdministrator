@@ -64,19 +64,19 @@ export default function App() {
   }
 
   async function deleteTask(taskId) {
-    const response = await fetch(API_URL, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: taskId }),
-    });
-    if (!response.ok) {
-      throw new Error(`API returned ${response.status}`);
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    if (!task.isNew) {
+      const response = await fetch(`${API_URL}/${taskId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
     }
-    const deletedMember = await response.json();
-    if (deletedMember.message !== "Team member deleted") {
-      throw new Error(`API returned ${response.status}`);
-    }
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+
+    setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
   }
 
   function updateTask(taskId, updatedTask) {
