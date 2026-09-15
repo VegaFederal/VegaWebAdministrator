@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
 import React, { useState, useRef } from 'react';
 
-export function TaskCard({ task, onDelete, onUpdateTask }) {
+export function TaskCard({ task, onDelete, onUpdateTask, onSave }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -14,6 +14,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingSecond, setIsEditingSecond] = useState(false);
   const [isEditingThird, setIsEditingThird] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Field fallbacks
   const text = task.name ?? "Name";
@@ -56,6 +57,18 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   const triggerFileInput = (e) => {
     e.stopPropagation();
     fileInputRef.current.click();
+  };
+
+  const handleSaveClick = async (e) => {
+    e.stopPropagation();
+    setIsSaving(true);
+    try {
+      await onSave(task.id);
+    } catch (err) {
+      alert(`Failed to save to the website: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSaveToJson = (e) => {
@@ -109,6 +122,11 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           <button onClick={triggerFileInput} className="text-xs py-1.5 px-3 cursor-pointer">
             Change Photo
           </button>
+          {task.isNew && (
+            <button onClick={handleSaveClick} disabled={isSaving} className="text-xs py-1.5 px-3 cursor-pointer">
+              {isSaving ? 'Saving…' : 'Save to Website'}
+            </button>
+          )}
         </div>
         <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" className="hidden" />
       </div>
