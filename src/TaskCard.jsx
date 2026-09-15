@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
 import React, { useState, useRef } from 'react';
 
-export function TaskCard({ task, onDelete, onUpdateTask }) {
+export function TaskCard({ task, onDelete, onUpdateTask, onSave }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -14,6 +14,8 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingSecond, setIsEditingSecond] = useState(false);
   const [isEditingThird, setIsEditingThird] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Field fallbacks
   const text = task.name ?? "Name";
@@ -36,7 +38,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
     onUpdateTask(task.id, { ...task, [key]: value });
   };
 
-  // Convert multi-line string text back to a clean JSON array
+  // Convert multi-line string text back tof a clean JSON array
   const handleThirdTextUpdate = (textValue) => {
     const linesArray = textValue.split('\n').map(line => line.trim()).filter(line => line !== "");
     handleUpdate('details', linesArray.length > 0 ? linesArray : ["Questions"]);
@@ -56,6 +58,30 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   const triggerFileInput = (e) => {
     e.stopPropagation();
     fileInputRef.current.click();
+  };
+
+  const handleSaveClick = async (e) => {
+    e.stopPropagation();
+    setIsSaving(true);
+    try {
+      await onSave(task.id);
+    } catch (err) {
+      alert(`Failed to save to the website: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteClick = async (e) => {
+    e.stopPropagation();
+    setIsDeleting(true);
+    try {
+      await onDelete(task.id);
+    } catch (err) {
+      alert(`Failed to delete from the website: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleSaveToJson = (e) => {
@@ -88,10 +114,8 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
       
       {/* DELETE BUTTON */}
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(task.id);
-        }}
+        onClick={handleDeleteClick}
+        disabled={isDeleting}
         className="absolute top-2 right-2 border-0 p-1 text-neutral-400 hover:text-vega-red transition-colors text-sm z-10 cursor-pointer"
         title="Delete task"
       >
@@ -109,6 +133,11 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           <button onClick={triggerFileInput} className="text-xs py-1.5 px-3 cursor-pointer">
             Change Photo
           </button>
+          {task.isNew && (
+            <button onClick={handleSaveClick} disabled={isSaving} className="text-xs py-1.5 px-3 cursor-pointer">
+              {isSaving ? 'Saving…' : 'Save to Website'}
+            </button>
+          )}
         </div>
         <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" className="hidden" />
       </div>
