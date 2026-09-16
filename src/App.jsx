@@ -262,15 +262,23 @@ export default function App() {
 
   return (
     <div className="p-4">
-      <div className="flex gap-4 mb-4 items-center">
-        <button onClick={openCardModal} className="cursor-pointer">
-          + Add Card
-        </button>
-        <button onClick={handleSaveAllCards} className="cursor-pointer">
-          Save All Cards Data
-        </button>
-        <input type="file" ref={fileInputRef} onChange={handleUploadJson} accept=".json" className="hidden" />
-      </div>
+      <header className="sticky top-4 z-40 mb-4 rounded-lg border border-neutral-700 bg-black/80 p-3 shadow-lg backdrop-blur">
+        <div className="flex items-center gap-4">
+          <button onClick={openCardModal} className="cursor-pointer">
+            + Add Card
+          </button>
+          <button onClick={handleSaveAllCards} className="cursor-pointer">
+            Save All Cards Data
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleUploadJson}
+            accept=".json"
+            className="hidden"
+          />
+        </div>
+      </header>
       <div>
         {showCreateCardModal && (
           <CreateCardModal
