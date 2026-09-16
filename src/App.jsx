@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { TaskCard } from './TaskCard.jsx';
 import { CreateCardModal } from './CreateCardModal.jsx';
+import { DeleteConfirmationModal } from './DeleteConfirmationModal.jsx';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
 import React, { useRef } from 'react';
@@ -23,6 +24,8 @@ function memberToTask(member) {
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [showCreateCardModal, setShowCreateModal] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [formError, setFormError] = useState('')
@@ -121,8 +124,21 @@ export default function App() {
     }));
   }
 
-  function deleteTask(taskId) {
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+  function promptDeleteTask(taskId){
+    setTaskToDelete(taskId);
+    setShowDeleteConfirmation(true);
+  }
+
+  function closeDeleteConfirmation() {
+    setShowDeleteConfirmation(false);
+    setTaskToDelete(null);
+  }
+
+  function deleteTask() {
+    if (taskToDelete === null) return;
+
+    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskToDelete));
+    closeDeleteConfirmation();
   }
 
   function updateTask(taskId, updatedTask) {
@@ -265,6 +281,12 @@ export default function App() {
             onSave={addDraft}
           />
         )}
+        {showDeleteConfirmation && (
+          <DeleteConfirmationModal
+            onCancel={closeDeleteConfirmation}
+            onConfirm={deleteTask}
+          />
+        )}
       </div>
 
       <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -274,7 +296,7 @@ export default function App() {
               <TaskCard
                 key={task.id}
                 task={task}
-                onDelete={deleteTask}
+                onDelete={promptDeleteTask}
                 onUpdateTask={updateTask}
               />
             ))}
