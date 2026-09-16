@@ -75,6 +75,8 @@ export default function App() {
     setTasks(prevTasks => [...prevTasks, newTask]);
   }
 
+  
+
   function openCardModal() {
     setDraft(emptyDraft);
     setShowCreateModal(true);
@@ -82,6 +84,13 @@ export default function App() {
 
   function closeCardModal() {
     setShowCreateModal(false);
+  }
+
+  function updateDraft(key, value) {
+    setDraft(previousDraft => ({
+      ...previousDraft,
+      [key]: value,
+    }));
   }
 
   function deleteTask(taskId) {
@@ -219,7 +228,13 @@ export default function App() {
         <input type="file" ref={fileInputRef} onChange={handleUploadJson} accept=".json" className="hidden" />
       </div>
       <div>
-        {showCreateCardModal && <CreateCardModal draft={draft} onCancel={closeCardModal}/>}
+        {showCreateCardModal && (
+          <CreateCardModal
+            draft={draft}
+            onUpdateDraft={updateDraft}
+            onCancel={closeCardModal}
+          />
+        )}
       </div>
 
       <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

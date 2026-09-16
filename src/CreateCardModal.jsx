@@ -5,13 +5,36 @@ import defaultImage from './assets/add_Photo.png';
 export function CreateCardModal({
   draft,
   error,
-  onTextChange,
-  onImageChange,
+  onUpdateDraft,
   onCancel,
   onSave,
 }) {
   const fileInputRef = useRef(null);
   const cardImage = draft.image || defaultImage;
+
+  const handleUpdate = (key, value) => {
+    onUpdateDraft(key, value);
+  };
+
+  const handleImageChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      handleUpdate('image', reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleQuestionsUpdate = (textValue) => {
+    const answers = textValue
+      .split('\n')
+      .map((answer) => answer.trim())
+      .filter((answer) => answer !== '');
+
+    handleUpdate('details', answers.length > 0 ? answers : ['Questions']);
+  };
 
   return (
     <div
@@ -58,7 +81,7 @@ export function CreateCardModal({
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            onChange={onImageChange}
+            onChange={handleImageChange}
             className="hidden"
             required
           />
@@ -68,7 +91,10 @@ export function CreateCardModal({
           Veteran Status
           <select 
             value={draft.veteranLogo ?? ''}
-            onChange={onTextChange}
+            onChange={(event) => handleUpdate(
+              'veteranLogo',
+              event.target.value === '' ? null : event.target.value
+            )}
             className="mt-1 w-full rounded-md border-2 border-grayscale-700 bg-grayscale-700 px-2 py-1 text-white shadow-lg outline-none"
             >
             <option value="">None (Null)</option>
@@ -83,7 +109,7 @@ export function CreateCardModal({
             name="name"
             type="text"
             value={draft.name ?? ''}
-            onChange={onTextChange}
+            onChange={(event) => handleUpdate('name', event.target.value)}
             placeholder="Name"
             className="mt-1 w-full"
             required
@@ -96,7 +122,7 @@ export function CreateCardModal({
             name="title"
             type="text"
             value={draft.title ?? ''}
-            onChange={onTextChange}
+            onChange={(event) => handleUpdate('title', event.target.value)}
             placeholder="Title"
             className="mt-1 w-full"
             required
@@ -106,8 +132,8 @@ export function CreateCardModal({
         <label className="block px-5 py-2.5 text-xs font-semibold text-neutral-300">
           Question Answers
           <textarea
-            defaultValue={draft.details ?? ''}
-            onChange={onTextChange}
+            defaultValue={Array.isArray(draft.details) ? draft.details.join('\n') : (draft.details ?? '')}
+            onBlur={(event) => handleQuestionsUpdate(event.target.value)}
             rows={3}
             className="mt-1 min-h-[5.25rem] w-full resize-y rounded-md border-2 border-grayscale-700 bg-grayscale-700 px-2 py-2 font-sans text-sm font-normal text-white shadow-lg outline-none"
           />
