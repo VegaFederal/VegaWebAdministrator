@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
 import React, { useState, useRef, useEffect } from 'react';
 
-export function TaskCard({ task, onDelete, onUpdateTask, shouldFocus }) {
+export function TaskCard({ task, onDelete, onUpdateTask }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -15,19 +15,6 @@ export function TaskCard({ task, onDelete, onUpdateTask, shouldFocus }) {
     setNodeRef(node);
     cardRef.current = node;
   };
-
-  useEffect(() => {
-    if (!shouldFocus || !cardRef.current) return;
-
-    cardRef.current.focus({
-      preventScroll: true,
-    });
-
-    cardRef.current.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-  }, [shouldFocus]);
 
   // UI editing toggles
   const [isEditing, setIsEditing] = useState(false);
@@ -157,7 +144,7 @@ export function TaskCard({ task, onDelete, onUpdateTask, shouldFocus }) {
         <select 
           value={veteranLogo ?? ""} 
           onChange={(e) => handleUpdate('veteranLogo', e.target.value === "" ? null : e.target.value)}
-          className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none focus:border-primary-500"
+          className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none"
         >
           <option value="">None (Null)</option>
           <option value="vetArmy">Army</option>
