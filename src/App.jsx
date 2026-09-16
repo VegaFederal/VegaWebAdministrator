@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { TaskCard } from './TaskCard.jsx';
+import { CreateCardModal } from './CreateCardModal.jsx';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
 import React, { useRef } from 'react';
@@ -21,11 +22,23 @@ function memberToTask(member) {
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
+  const [showCreateCardModal, setShowCreateModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const fileInputRef = useRef(null);
   // Keeps track of the active file reference for seamless saving
   const [fileHandle, setFileHandle] = useState(null);
+
+  const emptyDraft = {
+      id: "",
+      image: "",
+      name: "",
+      title: "",
+      details: ["Questions"],
+      veteranLogo: null,
+      memberOrder: "",
+  };
+  const [draft, setDraft] = useState(emptyDraft);
 
   useEffect(() => {
     if (!API_URL) {
@@ -60,6 +73,15 @@ export default function App() {
     };
 
     setTasks(prevTasks => [...prevTasks, newTask]);
+  }
+
+  function openCardModal() {
+    setDraft(emptyDraft);
+    setShowCreateModal(true);
+  }
+
+  function closeCardModal() {
+    setShowCreateModal(false);
   }
 
   function deleteTask(taskId) {
@@ -188,13 +210,16 @@ export default function App() {
   return (
     <div className="p-4">
       <div className="flex gap-4 mb-4 items-center">
-        <button onClick={addTask} className="cursor-pointer">
+        <button onClick={openCardModal} className="cursor-pointer">
           + Add Card
         </button>
         <button onClick={handleSaveAllCards} className="cursor-pointer">
           Save All Cards Data
         </button>
         <input type="file" ref={fileInputRef} onChange={handleUploadJson} accept=".json" className="hidden" />
+      </div>
+      <div>
+        {showCreateCardModal && <CreateCardModal draft={draft} onCancel={closeCardModal}/>}
       </div>
 
       <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
