@@ -83,7 +83,6 @@ export function CreateCardModal({
             accept="image/*"
             onChange={handleImageChange}
             className="hidden"
-            required
           />
         </div>
 

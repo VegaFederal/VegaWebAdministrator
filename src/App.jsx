@@ -25,6 +25,7 @@ export default function App() {
   const [showCreateCardModal, setShowCreateModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [formError, setFormError] = useState('')
   const fileInputRef = useRef(null);
   // Keeps track of the active file reference for seamless saving
   const [fileHandle, setFileHandle] = useState(null);
@@ -57,28 +58,55 @@ export default function App() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  function addTask() {
+  function addTask(card) {
+    setTasks(prevTasks => [...prevTasks, card]);
+  }
+
+  function hasRequiredFields(card){
+
+    if (!card || typeof card !== "object"){
+      return false;
+    }
+
+    const requiredValues = [
+      card.name,
+      card.title,
+      card.image
+    ];
+
+    return requiredValues.every(
+      value =>
+        typeof value === "string" &&
+        value.trim().length > 0
+    );
+  }
+
+  function addDraft(event){
+
+    event.preventDefault();
+
+    if (!hasRequiredFields(draft)) {
+      setFormError("Image, name, and title are required");
+      return;
+    }
     // Find the highest existing ID and increment it by 1
     const nextId = tasks.length > 0 ? Math.max(...tasks.map(task => Number(task.id) || 0)) + 1 : 1;
     const nextOrder = tasks.length > 0 ? Math.max(...tasks.map(task => task.memberOrder ?? 0)) + 1 : 1;
 
     const newTask = {
+      ...draft,
       id: String(nextId),
-      image: "",
-      name: "Name",
-      title: "Title",
-      details: ["Questions"],
-      veteranLogo: null,
       memberOrder: nextOrder,
     };
 
-    setTasks(prevTasks => [...prevTasks, newTask]);
+    addTask(newTask);
+    setFormError('');
+    closeCardModal();
   }
-
-  
 
   function openCardModal() {
     setDraft(emptyDraft);
+    setFormError('');
     setShowCreateModal(true);
   }
 
@@ -233,6 +261,8 @@ export default function App() {
             draft={draft}
             onUpdateDraft={updateDraft}
             onCancel={closeCardModal}
+            error={formError}
+            onSave={addDraft}
           />
         )}
       </div>
