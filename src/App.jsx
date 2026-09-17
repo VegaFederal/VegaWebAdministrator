@@ -144,7 +144,7 @@ export default function App() {
     if (!task) return;
 
     if (!task.isNew) {
-      const response = await fetch(`${API_URL}/${taskId}`, {
+      const response = await fetch(`${API_URL}/${taskToDelete}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
