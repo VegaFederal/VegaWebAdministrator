@@ -30,6 +30,7 @@ export default function App() {
   const [loadError, setLoadError] = useState(null);
   const [formError, setFormError] = useState('')
   const fileInputRef = useRef(null);
+  const [focusedTaskId, setFocusedTaskId] = useState(null);
   // Keeps track of the active file reference for seamless saving
   const [fileHandle, setFileHandle] = useState(null);
 
@@ -63,6 +64,7 @@ export default function App() {
 
   function addTask(card) {
     setTasks(prevTasks => [...prevTasks, card]);
+    setFocusedTaskId(card.id);
   }
 
   function hasRequiredFields(card){
@@ -306,6 +308,7 @@ export default function App() {
                 task={task}
                 onDelete={promptDeleteTask}
                 onUpdateTask={updateTask}
+                shouldFocus={task.id === focusedTaskId}
               />
             ))}
           </div>

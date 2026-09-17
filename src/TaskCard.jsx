@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
 import React, { useState, useRef, useEffect } from 'react';
 
-export function TaskCard({ task, onDelete, onUpdateTask }) {
+export function TaskCard({ task, onDelete, onUpdateTask, shouldFocus }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -15,6 +15,19 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
     setNodeRef(node);
     cardRef.current = node;
   };
+
+  useEffect(() => {
+    if (!shouldFocus || !cardRef.current) return;
+
+    cardRef.current.focus({
+      preventScroll: true,
+    });
+
+    cardRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [shouldFocus]);
 
   // UI editing toggles
   const [isEditing, setIsEditing] = useState(false);
