@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { TaskCard } from './TaskCard.jsx';
+import { CreateCardModal } from './CreateCardModal.jsx';
+import { DeleteConfirmationModal } from './DeleteConfirmationModal.jsx';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
 import React, { useRef } from 'react';
@@ -21,11 +23,27 @@ function memberToTask(member) {
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
+  const [showCreateCardModal, setShowCreateModal] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [formError, setFormError] = useState('')
   const fileInputRef = useRef(null);
+  const [focusedTaskId, setFocusedTaskId] = useState(null);
   // Keeps track of the active file reference for seamless saving
   const [fileHandle, setFileHandle] = useState(null);
+
+  const emptyDraft = {
+      id: "",
+      image: "",
+      name: "",
+      title: "",
+      details: ["Questions"],
+      veteranLogo: null,
+      memberOrder: "",
+  };
+  const [draft, setDraft] = useState(emptyDraft);
 
   useEffect(() => {
     if (!API_URL) {
@@ -44,30 +62,128 @@ export default function App() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  function addTask() {
+  function addTask(card) {
+    setTasks(prevTasks => [...prevTasks, card]);
+    setFocusedTaskId(card.id);
+  }
+
+  function hasRequiredFields(card){
+
+    if (!card || typeof card !== "object"){
+      return false;
+    }
+
+    const requiredValues = [
+      card.name,
+      card.title,
+      card.image
+    ];
+
+    return requiredValues.every(
+      value =>
+        typeof value === "string" &&
+        value.trim().length > 0
+    );
+  }
+
+  function addDraft(event){
+
+    event.preventDefault();
+
+    if (!hasRequiredFields(draft)) {
+      setFormError("Image, name, and title are required");
+      return;
+    }
     // Find the highest existing ID and increment it by 1
     const nextId = tasks.length > 0 ? Math.max(...tasks.map(task => Number(task.id) || 0)) + 1 : 1;
     const nextOrder = tasks.length > 0 ? Math.max(...tasks.map(task => task.memberOrder ?? 0)) + 1 : 1;
 
     const newTask = {
+      ...draft,
       id: String(nextId),
-      image: "",
-      name: "Name",
-      title: "Title",
-      details: ["Questions"],
-      veteranLogo: null,
       memberOrder: nextOrder,
+      isNew: true,
     };
 
-    setTasks(prevTasks => [...prevTasks, newTask]);
+    addTask(newTask);
+    setFormError('');
+    closeCardModal();
   }
 
-  function deleteTask(taskId) {
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+  function openCardModal() {
+    setDraft(emptyDraft);
+    setFormError('');
+    setShowCreateModal(true);
+  }
+
+  function closeCardModal() {
+    setShowCreateModal(false);
+  }
+
+  function updateDraft(key, value) {
+    setDraft(previousDraft => ({
+      ...previousDraft,
+      [key]: value,
+    }));
+  }
+
+  function promptDeleteTask(taskId){
+    setTaskToDelete(taskId);
+    setShowDeleteConfirmation(true);
+  }
+
+  function closeDeleteConfirmation() {
+    setShowDeleteConfirmation(false);
+    setTaskToDelete(null);
+  }
+
+  async function deleteTask() {
+    if (taskToDelete === null) return;
+
+    const task = tasks.find(t => t.id === taskToDelete);
+    if (!task) return;
+
+    if (!task.isNew) {
+      const response = await fetch(`${API_URL}/${taskToDelete}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+    }
+
+    setTasks(prevTasks => prevTasks.filter(t => t.id !== taskToDelete));
+    closeDeleteConfirmation();
   }
 
   function updateTask(taskId, updatedTask) {
     setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? updatedTask : task)) );
+  }
+
+  // Publishes a locally-created card to the live database + S3 via POST
+  async function saveTask(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        memberOrder: task.memberOrder,
+        name: task.name,
+        title: task.title,
+        details: task.details,
+        veteranLogo: task.veteranLogo,
+        image: task.image,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+
+    const savedMember = await response.json();
+    setTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? memberToTask(savedMember) : t)));
   }
 
   // Reorders tasks by drag position and renumbers memberOrder to match
@@ -187,14 +303,39 @@ export default function App() {
 
   return (
     <div className="p-4">
-      <div className="flex gap-4 mb-4 items-center">
-        <button onClick={addTask} className="cursor-pointer">
-          + Add Task
-        </button>
-        <button onClick={handleSaveAllCards} className="cursor-pointer">
-          Save All Cards Data
-        </button>
-        <input type="file" ref={fileInputRef} onChange={handleUploadJson} accept=".json" className="hidden" />
+      <header className="sticky top-4 z-40 mb-4 rounded-lg border border-neutral-700 bg-black/80 p-3 shadow-lg backdrop-blur">
+        <div className="flex items-center gap-4">
+          <button onClick={openCardModal} className="cursor-pointer">
+            + Add Card
+          </button>
+          <button onClick={handleSaveAllCards} className="cursor-pointer">
+            Save All Cards Data
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleUploadJson}
+            accept=".json"
+            className="hidden"
+          />
+        </div>
+      </header>
+      <div>
+        {showCreateCardModal && (
+          <CreateCardModal
+            draft={draft}
+            onUpdateDraft={updateDraft}
+            onCancel={closeCardModal}
+            error={formError}
+            onSave={addDraft}
+          />
+        )}
+        {showDeleteConfirmation && (
+          <DeleteConfirmationModal
+            onCancel={closeDeleteConfirmation}
+            onConfirm={deleteTask}
+          />
+        )}
       </div>
 
       <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -204,8 +345,10 @@ export default function App() {
               <TaskCard
                 key={task.id}
                 task={task}
-                onDelete={deleteTask}
+                onDelete={promptDeleteTask}
                 onUpdateTask={updateTask}
+                shouldFocus={task.id === focusedTaskId}
+                onSave={saveTask}
               />
             ))}
           </div>

@@ -1,19 +1,40 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
-export function TaskCard({ task, onDelete, onUpdateTask }) {
+export function TaskCard({ task, onDelete, onUpdateTask, onSave, shouldFocus }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
 
   const fileInputRef = useRef(null);
+  const cardRef = useRef(null);
+
+  const connectedCardRef = (node) => {
+    setNodeRef(node);
+    cardRef.current = node;
+  };
+
+  useEffect(() => {
+    if (!shouldFocus || !cardRef.current) return;
+
+    cardRef.current.focus({
+      preventScroll: true,
+    });
+
+    cardRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [shouldFocus]);
 
   // UI editing toggles
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingSecond, setIsEditingSecond] = useState(false);
   const [isEditingThird, setIsEditingThird] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Field fallbacks
   const text = task.name ?? "Name";
@@ -36,7 +57,26 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
     onUpdateTask(task.id, { ...task, [key]: value });
   };
 
-  // Convert multi-line string text back to a clean JSON array
+  const handleCardClick = (event) => {
+    const clickedControl = event.target.closest(
+      'button, input, textarea, select'
+    );
+
+    if (clickedControl) return;
+
+    cardRef.current?.focus({
+      preventScroll: true,
+    });
+
+    cardRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+
+    
+  };
+
+  // Convert multi-line string text back tof a clean JSON array
   const handleThirdTextUpdate = (textValue) => {
     const linesArray = textValue.split('\n').map(line => line.trim()).filter(line => line !== "");
     handleUpdate('details', linesArray.length > 0 ? linesArray : ["Questions"]);
@@ -56,6 +96,30 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   const triggerFileInput = (e) => {
     e.stopPropagation();
     fileInputRef.current.click();
+  };
+
+  const handleSaveClick = async (e) => {
+    e.stopPropagation();
+    setIsSaving(true);
+    try {
+      await onSave(task.id);
+    } catch (err) {
+      alert(`Failed to save to the website: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteClick = async (e) => {
+    e.stopPropagation();
+    setIsDeleting(true);
+    try {
+      await onDelete(task.id);
+    } catch (err) {
+      alert(`Failed to delete from the website: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleSaveToJson = (e) => {
@@ -84,14 +148,12 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
   };
 
   return (
-    <div ref={setNodeRef} {...attributes} className="relative rounded-lg bg-neutral-700 p-4 shadow-sm hover:shadow-md transition-shadow" style={style}>
+    <div ref={connectedCardRef} tabIndex={-1} {...attributes} onClick={handleCardClick} className="relative rounded-lg bg-neutral-700 p-4 shadow-sm hover:shadow-md transition-shadow" style={style}>
       
       {/* DELETE BUTTON */}
       <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(task.id);
-        }}
+        onClick={handleDeleteClick}
+        disabled={isDeleting}
         className="absolute top-2 right-2 border-0 p-1 text-neutral-400 hover:text-vega-red transition-colors text-sm z-10 cursor-pointer"
         title="Delete task"
       >
@@ -109,6 +171,11 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
           <button onClick={triggerFileInput} className="text-xs py-1.5 px-3 cursor-pointer">
             Change Photo
           </button>
+          {task.isNew && (
+            <button onClick={handleSaveClick} disabled={isSaving} className="text-xs py-1.5 px-3 cursor-pointer">
+              {isSaving ? 'Saving…' : 'Save to Website'}
+            </button>
+          )}
         </div>
         <input type="file" ref={fileInputRef} onChange={handleImageChange} accept="image/*" className="hidden" />
       </div>
@@ -119,7 +186,7 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
         <select 
           value={veteranLogo ?? ""} 
           onChange={(e) => handleUpdate('veteranLogo', e.target.value === "" ? null : e.target.value)}
-          className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none focus:border-primary-500"
+          className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none"
         >
           <option value="">None (Null)</option>
           <option value="vetArmy">Army</option>
@@ -142,7 +209,17 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
         ) : (
           <span
             onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
-            style={{ cursor: 'pointer', borderBottom: '1px dashed #555', color: 'white' }}
+            style={{
+              cursor: 'text',
+              display: 'block',
+              width: '100%',
+              padding: '8px 10px',
+              color: 'white',
+              backgroundColor: '#262626',
+              border: '1px solid #737373',
+              borderRadius: '4px',
+              minHeight: '38px',
+            }}
           >
             {text}
           </span>
@@ -164,7 +241,17 @@ export function TaskCard({ task, onDelete, onUpdateTask }) {
         ) : (
           <span
             onClick={(e) => { e.stopPropagation(); setIsEditingSecond(true); }}
-            style={{ cursor: 'pointer', borderBottom: '1px dashed #555', color: 'white' }}
+            style={{
+              cursor: 'text',
+              display: 'block',
+              width: '100%',
+              padding: '8px 10px',
+              color: 'white',
+              backgroundColor: '#262626',
+              border: '1px solid #737373',
+              borderRadius: '4px',
+              minHeight: '38px',
+            }}
           >
             {secondText}
           </span>
