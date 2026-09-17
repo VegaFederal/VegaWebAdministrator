@@ -102,6 +102,7 @@ export default function App() {
       ...draft,
       id: String(nextId),
       memberOrder: nextOrder,
+      isNew: true,
     };
 
     addTask(newTask);
@@ -136,15 +137,53 @@ export default function App() {
     setTaskToDelete(null);
   }
 
-  function deleteTask() {
+  async function deleteTask() {
     if (taskToDelete === null) return;
 
-    setTasks(prevTasks => prevTasks.filter(task => task.id !== taskToDelete));
+    const task = tasks.find(t => t.id === taskToDelete);
+    if (!task) return;
+
+    if (!task.isNew) {
+      const response = await fetch(`${API_URL}/${taskId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+    }
+
+    setTasks(prevTasks => prevTasks.filter(t => t.id !== taskToDelete));
     closeDeleteConfirmation();
   }
 
   function updateTask(taskId, updatedTask) {
     setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? updatedTask : task)) );
+  }
+
+  // Publishes a locally-created card to the live database + S3 via POST
+  async function saveTask(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        memberOrder: task.memberOrder,
+        name: task.name,
+        title: task.title,
+        details: task.details,
+        veteranLogo: task.veteranLogo,
+        image: task.image,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+
+    const savedMember = await response.json();
+    setTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? memberToTask(savedMember) : t)));
   }
 
   // Reorders tasks by drag position and renumbers memberOrder to match
@@ -309,6 +348,7 @@ export default function App() {
                 onDelete={promptDeleteTask}
                 onUpdateTask={updateTask}
                 shouldFocus={task.id === focusedTaskId}
+                onSave={saveTask}
               />
             ))}
           </div>
