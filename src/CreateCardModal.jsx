@@ -150,7 +150,7 @@ export function CreateCardModal({
           </button>
 
           <button type="submit" className="cursor-pointer">
-            Save Card
+            Add Card
           </button>
         </div>
       </form>

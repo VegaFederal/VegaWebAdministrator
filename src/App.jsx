@@ -23,12 +23,15 @@ function memberToTask(member) {
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
+  const [currentTasks, setCurrentTasks] = useState([]);
+  const [isSavingCardOrder, setIsSavingCardOrder] = useState(false);
   const [showCreateCardModal, setShowCreateModal] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [formError, setFormError] = useState('')
+  const [formError, setFormError] = useState('');
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
   const fileInputRef = useRef(null);
   const [focusedTaskId, setFocusedTaskId] = useState(null);
   // Keeps track of the active file reference for seamless saving
@@ -57,10 +60,32 @@ export default function App() {
         if (!res.ok) throw new Error(`API returned ${res.status}`);
         return res.json();
       })
-      .then((members) => setTasks(members.map(memberToTask)))
+      .then((members) => {setTasks(members.map(memberToTask)); setCurrentTasks(members.map(memberToTask));})
       .catch((err) => setLoadError(err.message))
       .finally(() => setIsLoading(false));
   }, []);
+
+  useEffect(() => {
+    const hasUnsavedChanges = tasks.some(task => (task.isDirty === true || task.isNew));
+
+    if (hasUnsavedChanges) {
+      setUnsavedChanges(true);;
+    } else {
+      setUnsavedChanges(false);
+      return;
+    }
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [tasks]);
 
   function addTask(card) {
     setTasks(prevTasks => [...prevTasks, card]);
@@ -153,17 +178,32 @@ export default function App() {
     }
 
     setTasks(prevTasks => prevTasks.filter(t => t.id !== taskToDelete));
+    setCurrentTasks(prevTasks => prevTasks.filter(t => t.id !== taskToDelete));
     closeDeleteConfirmation();
   }
 
+  function tasksAreEqual(task, originalTask) {
+    return (
+      task.name === originalTask.name &&
+      task.title === originalTask.title &&
+      task.image === originalTask.image &&
+      task.veteranLogo === originalTask.veteranLogo &&
+      JSON.stringify(task.details) === JSON.stringify(originalTask.details)
+    );
+  }
+
   function updateTask(taskId, updatedTask) {
-    setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? updatedTask : task)) );
+    const originalTask =  currentTasks.find(task => task.id === taskId)
+
+    const isDirty = originalTask ? !tasksAreEqual(updatedTask, originalTask) : false;
+
+    setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? { ...updatedTask, isDirty } : task)) );
   }
 
   // Publishes a locally-created card to the live database + S3 via POST
   async function saveTask(taskId) {
     const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
+    if (!task || !hasRequiredFields(task)) return;
 
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -184,6 +224,21 @@ export default function App() {
 
     const savedMember = await response.json();
     setTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? memberToTask(savedMember) : t)));
+    setCurrentTasks(prevTasks => [...prevTasks, memberToTask(savedMember)]);
+  }
+
+  async function saveUpdatedTask(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !hasRequiredFields(task)) return;
+
+    //Waiting for update API
+    return {success: true,};
+  }
+
+  async function saveCardOrder() {
+
+    //Waiting for update API
+    return {success: true,};
   }
 
   // Reorders tasks by drag position and renumbers memberOrder to match
@@ -318,6 +373,14 @@ export default function App() {
             accept=".json"
             className="hidden"
           />
+          <button onClick={saveCardOrder} disabled={isSavingCardOrder} className="cursor-pointer">
+            Save Card Order
+          </button>
+          {unsavedChanges && (
+            <label className="block text-lg font-bold text-red-500 bg-red-950 border border-red-500 rounded-md px-3 py-2">
+              Unsaved Changes
+            </label>
+          )}
         </div>
       </header>
       <div>
@@ -349,6 +412,7 @@ export default function App() {
                 onUpdateTask={updateTask}
                 shouldFocus={task.id === focusedTaskId}
                 onSave={saveTask}
+                onSaveUpdate={saveUpdatedTask}
               />
             ))}
           </div>
