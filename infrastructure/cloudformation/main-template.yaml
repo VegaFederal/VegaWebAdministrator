@@ -52,6 +52,10 @@ Parameters:
     Type: String
     Description: Shared DynamoDB table ARN
 
+  AssetsBucketName:
+    Type: String
+    Description: Shared assets S3 bucket name
+
   AllowedOrigin:
     Type: String
     Default: ""
@@ -83,6 +87,7 @@ Resources:
         DeploymentBucket: !Ref DeploymentBucket
         TableName: !Ref TableName
         TableArn: !Ref TableArn
+        AssetsBucketName: !Ref AssetsBucketName
         AllowedOrigin: !Ref AllowedOrigin
       Tags:
         - Key: Environment
