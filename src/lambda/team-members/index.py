@@ -44,11 +44,7 @@ def handler(event, context):
         elif method == 'DELETE':
             return delete_team_member(event)
         elif method == 'PUT':
-            return {
-                "statusCode": 200,
-                "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
-                "body": json.dumps("Hello world")
-            }
+            return update_team_member(event)
         else:
             return {
                 "statusCode": 405,
@@ -103,6 +99,50 @@ def delete_team_member(event):
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
         "body": json.dumps({"message": "Team member deleted"})
     }
+
+
+def update_team_member(event):
+    path_params = event.get('pathParameters') or {}
+    member_id = path_params.get('id')
+    if not member_id:
+        return {
+            "statusCode": 400,
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "body": json.dumps({"error": "ID is required"})
+        }
+
+    existing = table.get_item(Key={'id': member_id}).get('Item')
+    if not existing:
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "body": json.dumps({"error": "Team member not found"})
+        }
+
+    body = json.loads(event.get('body') or '{}')
+    member_order = body.get('memberOrder', existing.get('memberOrder', 0))
+
+    # Keep the stored image for now; photo replacement is a later ticket.
+    item = {
+        'id': member_id,
+        'memberOrder': int(member_order),
+        'name': body.get('name', existing.get('name', 'Name')),
+        'title': body.get('title', existing.get('title', 'Title')),
+        'details': body['details'] if 'details' in body else (existing.get('details') or []),
+        'image': existing.get('image', ''),
+    }
+
+    logo = body['veteranLogo'] if 'veteranLogo' in body else existing.get('veteranLogo')
+    if logo:
+        item['veteranLogo'] = logo
+
+    table.put_item(Item=item)
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+        "body": json.dumps(decimal_to_native(item))
+    }
+
 
 def create_team_member(event):
     body = json.loads(event.get('body') or '{}')
