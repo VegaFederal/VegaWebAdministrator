@@ -170,12 +170,12 @@ jobs:
         run: |
           echo "DB_ENVIRONMENT=dev" >> $GITHUB_ENV
 
-      - name: Resolve shared database from VegaWebAWS
+      - name: Resolve shared database from vegaWebAdmin
         run: |
           DB_STACK_NAME="vega-database-${{ env.DB_ENVIRONMENT }}"
           if ! aws cloudformation describe-stacks --stack-name $DB_STACK_NAME 2>/dev/null; then
             echo "ERROR: Shared database stack $DB_STACK_NAME not found."
-            echo "The static database must be created by VegaWebAWS first (VegaFederal/VegaWebAWS#418)."
+            echo "The static database must be created by vegaWebAdmin first (VegaFederal/vegaWebAdmin#418)."
             exit 1
           fi
           DB_TABLE_NAME=$(aws cloudformation describe-stacks \
@@ -199,7 +199,7 @@ jobs:
           ASSETS_STACK_NAME="vega-assets-${{ env.DB_ENVIRONMENT }}"
           if ! aws cloudformation describe-stacks --stack-name $ASSETS_STACK_NAME 2>/dev/null; then
             echo "ERROR: Shared assets stack $ASSETS_STACK_NAME not found."
-            echo "The static assets bucket must be created by VegaWebAWS first."
+            echo "The static assets bucket must be created by vegaWebAdmin first."
             exit 1
           fi
           ASSETS_BUCKET_NAME=$(aws cloudformation describe-stacks \
@@ -327,12 +327,12 @@ jobs:
           echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
           echo "DB_ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
 
-      - name: Resolve shared database from VegaWebAWS
+      - name: Resolve shared database from vegaWebAdmin
         run: |
           DB_STACK_NAME="vega-database-${{ env.DB_ENVIRONMENT }}"
           if ! aws cloudformation describe-stacks --stack-name $DB_STACK_NAME 2>/dev/null; then
             echo "ERROR: Shared database stack $DB_STACK_NAME not found."
-            echo "The static database must be created by VegaWebAWS first (VegaFederal/VegaWebAWS#418)."
+            echo "The static database must be created by vegaWebAdmin first (VegaFederal/vegaWebAdmin#418)."
             exit 1
           fi
           DB_TABLE_NAME=$(aws cloudformation describe-stacks \
@@ -356,7 +356,7 @@ jobs:
           ASSETS_STACK_NAME="vega-assets-${{ env.DB_ENVIRONMENT }}"
           if ! aws cloudformation describe-stacks --stack-name $ASSETS_STACK_NAME 2>/dev/null; then
             echo "ERROR: Shared assets stack $ASSETS_STACK_NAME not found."
-            echo "The static assets bucket must be created by VegaWebAWS first."
+            echo "The static assets bucket must be created by vegaWebAdmin first."
             exit 1
           fi
           ASSETS_BUCKET_NAME=$(aws cloudformation describe-stacks \
