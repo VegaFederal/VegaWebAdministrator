@@ -40,7 +40,7 @@ Resources:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
     Properties:
-      BucketName: !Sub "vegawebaws-${Environment}-cloudfront-logs-${AWS::AccountId}"
+      BucketName: !Sub "vegawebadmin-${Environment}-cloudfront-logs-${AWS::AccountId}"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
