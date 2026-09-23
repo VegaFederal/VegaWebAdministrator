@@ -31,7 +31,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [formError, setFormError] = useState('');
-  const [unsavedChanges, setUnsavedChanges] = useState(false);
   const fileInputRef = useRef(null);
   const [focusedTaskId, setFocusedTaskId] = useState(null);
   // Keeps track of the active file reference for seamless saving
@@ -55,6 +54,22 @@ export default function App() {
       memberOrder: task.memberOrder,
     }));
 
+  const currentOrders = [...currentTasks]
+    .sort((a, b) => a.memberOrder - b.memberOrder)
+    .map(task => ({
+      id: task.id,
+      memberOrder: task.memberOrder,
+    }));
+
+  const hasUnsavedCardChanges = tasks.some(task => task.isDirty === true || task.isNew);
+  const hasUnsavedCardOrder =
+    orders.length !== currentOrders.length ||
+    orders.some((order, index) => (
+      order.id !== currentOrders[index]?.id ||
+      order.memberOrder !== currentOrders[index]?.memberOrder
+    ));
+  const unsavedChanges = hasUnsavedCardChanges || hasUnsavedCardOrder;
+
   useEffect(() => {
     if (!API_URL) {
       setLoadError("VITE_API_URL is not configured.");
@@ -73,14 +88,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const hasUnsavedChanges = tasks.some(task => (task.isDirty === true || task.isNew));
-
-    if (hasUnsavedChanges) {
-      setUnsavedChanges(true);;
-    } else {
-      setUnsavedChanges(false);
-      return;
-    }
+    if (!unsavedChanges) return;
 
     const handleBeforeUnload = (event) => {
       event.preventDefault();
@@ -92,7 +100,7 @@ export default function App() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [tasks]);
+  }, [unsavedChanges]);
 
   function addTask(card) {
     setTasks(prevTasks => [...prevTasks, card]);
@@ -259,6 +267,18 @@ export default function App() {
       }
 
       const result = await response.json();
+
+      const savedOrderById = new Map(
+        orders.map(order => [order.id, order.memberOrder])
+      );
+
+      setCurrentTasks(previousTasks =>
+        previousTasks.map(task => ({
+          ...task,
+          memberOrder: savedOrderById.get(task.id) ?? task.memberOrder,
+        }))
+      );
+
       return result;
     } finally {
       setIsSavingCardOrder(false);
@@ -397,12 +417,21 @@ export default function App() {
             accept=".json"
             className="hidden"
           />
-          <button onClick={saveCardOrder} disabled={isSavingCardOrder || unsavedChanges} className="cursor-pointer">
+          <button
+            onClick={saveCardOrder}
+            disabled={isSavingCardOrder || !hasUnsavedCardOrder || hasUnsavedCardChanges}
+            className="cursor-pointer"
+          >
             Save Card Order
           </button>
-          {unsavedChanges && (
+          {hasUnsavedCardOrder && (
+            <label className="block text-lg font-bold text-yellow-400 bg-yellow-950 border border-yellow-500 rounded-md px-3 py-2">
+              Unsaved Card Order
+            </label>
+          )}
+          {hasUnsavedCardChanges && (
             <label className="block text-lg font-bold text-red-500 bg-red-950 border border-red-500 rounded-md px-3 py-2">
-              Unsaved Changes
+              Unsaved Card Changes
             </label>
           )}
         </div>
