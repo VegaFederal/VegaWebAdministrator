@@ -131,6 +131,13 @@ Resources:
       ApiId: !Ref TeamMembersApi
       RouteKey: PUT /team-members/{id}
       Target: !Sub integrations/${TeamMembersIntegration}
+  
+  PutTeamMembersOrderRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref TeamMembersApi
+      RouteKey: PUT /team-members/order
+      Target: !Sub integrations/${TeamMembersIntegration}
 
   DeleteTeamMembersRoute:
     Type: AWS::ApiGatewayV2::Route

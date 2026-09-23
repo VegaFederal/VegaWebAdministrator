@@ -48,6 +48,13 @@ export default function App() {
   };
   const [draft, setDraft] = useState(emptyDraft);
 
+  const orders = [...tasks]
+    .sort((a, b) => a.memberOrder - b.memberOrder)
+    .map(task => ({
+      id: task.id,
+      memberOrder: task.memberOrder,
+    }));
+
   useEffect(() => {
     if (!API_URL) {
       setLoadError("VITE_API_URL is not configured.");
@@ -236,9 +243,26 @@ export default function App() {
   }
 
   async function saveCardOrder() {
+    setIsSavingCardOrder(true);
 
-    //Waiting for update API
-    return {success: true,};
+    try {
+      const response = await fetch(`${API_URL}/order`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ orders }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } finally {
+      setIsSavingCardOrder(false);
+    }
   }
 
   // Reorders tasks by drag position and renumbers memberOrder to match
@@ -373,7 +397,7 @@ export default function App() {
             accept=".json"
             className="hidden"
           />
-          <button onClick={saveCardOrder} disabled={isSavingCardOrder} className="cursor-pointer">
+          <button onClick={saveCardOrder} disabled={isSavingCardOrder || unsavedChanges} className="cursor-pointer">
             Save Card Order
           </button>
           {unsavedChanges && (
