@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
 import React, { useState, useRef, useEffect } from 'react';
 
-export function TaskCard({ task, onDelete, onUpdateTask, onSave, shouldFocus }) {
+export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, shouldFocus }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -34,6 +34,7 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, shouldFocus }) 
   const [isEditingSecond, setIsEditingSecond] = useState(false);
   const [isEditingThird, setIsEditingThird] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Field fallbacks
@@ -110,6 +111,18 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, shouldFocus }) 
     }
   };
 
+  const handleUpdateClick = async (e) => {
+    e.stopPropagation();
+    setIsUpdating(true);
+    try {
+      await onSaveUpdate(task.id);
+    } catch (err) {
+      alert(`Failed to save update to the website: ${err.message}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleDeleteClick = async (e) => {
     e.stopPropagation();
     setIsDeleting(true);
@@ -172,8 +185,13 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, shouldFocus }) 
             Change Photo
           </button>
           {task.isNew && (
-            <button onClick={handleSaveClick} disabled={isSaving} className="text-xs py-1.5 px-3 cursor-pointer">
+            <button onClick={handleSaveClick} disabled={isSaving} className="text-xs py-1.5 px-3 cursor-pointer border-red-500">
               {isSaving ? 'Saving…' : 'Save to Website'}
+            </button>
+          )}
+          {!task.isNew && task.isDirty && (
+            <button onClick={handleUpdateClick} disabled={isUpdating} className="text-xs py-1.5 px-3 cursor-pointer border-red-500">
+              {isUpdating ? 'Updating…' : 'Save Update'}
             </button>
           )}
         </div>
