@@ -35,6 +35,7 @@ def handler(event, context):
         }
 
     method = event['requestContext']['http']['method']
+    route_key = event.get('routeKey', '')
 
     try:
         if method == 'GET':
@@ -44,10 +45,15 @@ def handler(event, context):
         elif method == 'DELETE':
             return delete_team_member(event)
         elif method == 'PUT':
+            if route_key == 'PUT /team-members/order':
+                return update_card_order(event)
             return {
-                "statusCode": 200,
-                "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
-                "body": json.dumps("Hello world")
+                "statusCode": 404,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*"
+                },
+                "body": json.dumps({"error": "Unknown PUT route"})
             }
         else:
             return {
@@ -130,4 +136,33 @@ def create_team_member(event):
         "statusCode": 201,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
         "body": json.dumps(item)
+    }
+
+def update_card_order(event):
+    body = json.loads(event.get('body') or '{}')
+    orders = body['orders']
+
+    for card_order in orders:
+        table.update_item(
+            Key={
+                'id': card_order['id']
+            },
+            UpdateExpression='SET #order = :order',
+            ExpressionAttributeNames={
+                '#order': 'memberOrder'
+            },
+            ExpressionAttributeValues={
+                ':order': card_order['memberOrder']
+            }
+        )
+
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+        },
+        "body": json.dumps({
+            "message": "Card order updated"
+        })
     }

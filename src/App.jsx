@@ -31,7 +31,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [formError, setFormError] = useState('');
-  const [unsavedChanges, setUnsavedChanges] = useState(false);
   const fileInputRef = useRef(null);
   const [focusedTaskId, setFocusedTaskId] = useState(null);
   // Keeps track of the active file reference for seamless saving
@@ -47,6 +46,26 @@ export default function App() {
       memberOrder: "",
   };
   const [draft, setDraft] = useState(emptyDraft);
+
+  const orders = [...tasks]
+    .sort((a, b) => a.memberOrder - b.memberOrder)
+    .map(task => ({
+      id: task.id,
+      memberOrder: task.memberOrder,
+    }));
+
+  const currentOrders = [...currentTasks]
+    .sort((a, b) => a.memberOrder - b.memberOrder)
+    .map(task => ({
+      id: task.id,
+      memberOrder: task.memberOrder,
+    }));
+
+  const hasUnsavedCardChanges = tasks.some(task => task.isDirty === true || task.isNew);
+  const hasUnsavedCardOrder =
+    orders.length !== currentOrders.length ||
+    orders.some((order, index) => order.id !== currentOrders[index]?.id);
+  const unsavedChanges = hasUnsavedCardChanges || hasUnsavedCardOrder;
 
   useEffect(() => {
     if (!API_URL) {
@@ -66,14 +85,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const hasUnsavedChanges = tasks.some(task => (task.isDirty === true || task.isNew));
-
-    if (hasUnsavedChanges) {
-      setUnsavedChanges(true);;
-    } else {
-      setUnsavedChanges(false);
-      return;
-    }
+    if (!unsavedChanges) return;
 
     const handleBeforeUnload = (event) => {
       event.preventDefault();
@@ -85,7 +97,7 @@ export default function App() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [tasks]);
+  }, [unsavedChanges]);
 
   function addTask(card) {
     setTasks(prevTasks => [...prevTasks, card]);
@@ -236,9 +248,38 @@ export default function App() {
   }
 
   async function saveCardOrder() {
+    setIsSavingCardOrder(true);
 
-    //Waiting for update API
-    return {success: true,};
+    try {
+      const response = await fetch(`${API_URL}/order`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ orders }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      const savedOrderById = new Map(
+        orders.map(order => [order.id, order.memberOrder])
+      );
+
+      setCurrentTasks(previousTasks =>
+        previousTasks.map(task => ({
+          ...task,
+          memberOrder: savedOrderById.get(task.id) ?? task.memberOrder,
+        }))
+      );
+
+      return result;
+    } finally {
+      setIsSavingCardOrder(false);
+    }
   }
 
   // Reorders tasks by drag position and renumbers memberOrder to match
@@ -373,12 +414,21 @@ export default function App() {
             accept=".json"
             className="hidden"
           />
-          <button onClick={saveCardOrder} disabled={isSavingCardOrder} className="cursor-pointer">
+          <button
+            onClick={saveCardOrder}
+            disabled={isSavingCardOrder || !hasUnsavedCardOrder || hasUnsavedCardChanges}
+            className="cursor-pointer"
+          >
             Save Card Order
           </button>
-          {unsavedChanges && (
+          {hasUnsavedCardOrder && (
+            <label className="block text-lg font-bold text-yellow-400 bg-yellow-950 border border-yellow-500 rounded-md px-3 py-2">
+              Unsaved Card Order
+            </label>
+          )}
+          {hasUnsavedCardChanges && (
             <label className="block text-lg font-bold text-red-500 bg-red-950 border border-red-500 rounded-md px-3 py-2">
-              Unsaved Changes
+              Unsaved Card Changes
             </label>
           )}
         </div>
