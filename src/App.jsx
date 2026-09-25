@@ -64,10 +64,7 @@ export default function App() {
   const hasUnsavedCardChanges = tasks.some(task => task.isDirty === true || task.isNew);
   const hasUnsavedCardOrder =
     orders.length !== currentOrders.length ||
-    orders.some((order, index) => (
-      order.id !== currentOrders[index]?.id ||
-      order.memberOrder !== currentOrders[index]?.memberOrder
-    ));
+    orders.some((order, index) => order.id !== currentOrders[index]?.id);
   const unsavedChanges = hasUnsavedCardChanges || hasUnsavedCardOrder;
 
   useEffect(() => {
