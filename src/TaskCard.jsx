@@ -77,10 +77,16 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
     
   };
 
-  // Convert multi-line string text back tof a clean JSON array
+  const fieldEditClassName = "w-full rounded border border-neutral-500 bg-neutral-800 px-2.5 py-2 text-white outline-none";
+
+  // Convert multi-line string text back to a clean JSON array
   const handleThirdTextUpdate = (textValue) => {
     const linesArray = textValue.split('\n').map(line => line.trim()).filter(line => line !== "");
     handleUpdate('details', linesArray.length > 0 ? linesArray : ["Questions"]);
+  };
+
+  const handleThirdTextChange = (textValue) => {
+    handleUpdate('details', textValue.split('\n'));
   };
 
   const handleImageChange = (e) => {
@@ -222,7 +228,7 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
             onBlur={() => setIsEditing(false)}
             onKeyDown={(e) => e.key === 'Enter' && setIsEditing(false)}
             autoFocus
-            className="text-black p-1 rounded w-full"
+            className={fieldEditClassName}
           />
         ) : (
           <span
@@ -254,7 +260,7 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
             onBlur={() => setIsEditingSecond(false)}
             onKeyDown={(e) => e.key === 'Enter' && setIsEditingSecond(false)}
             autoFocus
-            className="text-black p-1 rounded w-full"
+            className={fieldEditClassName}
           />
         ) : (
           <span
@@ -280,13 +286,14 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
       <div style={{ padding: '10px 20px' }} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
         {isEditingThird ? (
           <textarea
-            defaultValue={thirdTextArray.join('\n')}
+            value={thirdTextArray.join('\n')}
+            onChange={(e) => handleThirdTextChange(e.target.value)}
             onBlur={(e) => {
               handleThirdTextUpdate(e.target.value);
               setIsEditingThird(false);
             }}
             autoFocus
-            className="text-black p-1 rounded w-full h-24 font-sans text-sm resize-none"
+            className={`${fieldEditClassName} h-24 resize-none font-sans text-sm`}
           />
         ) : (
           <div

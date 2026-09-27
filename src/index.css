@@ -47,6 +47,7 @@ button {
   @apply rounded-none border border-white bg-transparent px-6 py-2 font-semibold uppercase tracking-wide text-white transition-colors hover:bg-white/20 disabled:border-grayscale-700 disabled:text-grayscale-400 disabled:hover:bg-transparent disabled:cursor-not-allowed;
 }
 
-input[type='text'] { 
+input[type='text'],
+textarea { 
   @apply rounded-md border-2 border-grayscale-700 bg-grayscale-700 px-2 py-1 text-white shadow-lg outline-none focus:border-primary-500; 
 }
