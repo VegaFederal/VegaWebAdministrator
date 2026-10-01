@@ -22,6 +22,26 @@ def decimal_to_native(obj):
     return obj
 
 
+def upload_image_data_url(data_url):
+    if not isinstance(data_url, str) or not data_url.startswith('data:'):
+        raise ValueError('Invalid replacement image')
+
+    try:
+        header, encoded = data_url.split(',', 1)
+        extension = header.split('/')[1].split(';')[0]
+    except (ValueError, IndexError) as exc:
+        raise ValueError('Invalid image data') from exc
+
+    key = f"About_us/{uuid.uuid4()}.{extension}"
+    s3.put_object(
+        Bucket=BUCKET_NAME,
+        Key=key,
+        Body=base64.b64decode(encoded),
+        ContentType=f"image/{extension}",
+    )
+    return key, f"https://{BUCKET_NAME}.s3.amazonaws.com/{key}"
+
+
 def handler(event, context):
     headers = event.get('headers', {})
     origin = headers.get('origin', '')
@@ -134,21 +154,52 @@ def update_team_member(event):
     body = json.loads(event.get('body') or '{}')
     member_order = body.get('memberOrder', existing.get('memberOrder', 0))
 
-    # Keep the stored image for now; photo replacement is handled separately.
+    old_image_url = existing.get('image', '')
+    new_image_url = old_image_url
+    new_image_key = None
+
+    if 'image' in body:
+        try:
+            new_image_key, new_image_url = upload_image_data_url(body['image'])
+        except ValueError as exc:
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+                "body": json.dumps({"error": str(exc)})
+            }
+
     item = {
         'id': member_id,
         'memberOrder': int(member_order),
         'name': body.get('name', existing.get('name', 'Name')),
         'title': body.get('title', existing.get('title', 'Title')),
         'details': body['details'] if 'details' in body else (existing.get('details') or []),
-        'image': existing.get('image', ''),
+        'image': new_image_url,
     }
 
     logo = body['veteranLogo'] if 'veteranLogo' in body else existing.get('veteranLogo')
     if logo:
         item['veteranLogo'] = logo
 
-    table.put_item(Item=item)
+    try:
+        table.put_item(Item=item)
+    except Exception:
+        if new_image_key:
+            try:
+                s3.delete_object(Bucket=BUCKET_NAME, Key=new_image_key)
+            except Exception as exc:
+                print(f"Failed to clean up new image {new_image_key}: {exc}")
+        raise
+
+    if new_image_key:
+        if BUCKET_NAME and BUCKET_NAME in old_image_url and '.amazonaws.com/' in old_image_url:
+            old_image_key = old_image_url.split('.amazonaws.com/', 1)[1]
+            if old_image_key and old_image_key != new_image_key:
+                try:
+                    s3.delete_object(Bucket=BUCKET_NAME, Key=old_image_key)
+                except Exception as exc:
+                    print(f"Failed to delete old image {old_image_key}: {exc}")
+
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},

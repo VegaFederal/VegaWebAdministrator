@@ -241,21 +241,28 @@ export default function App() {
 
   async function saveUpdatedTask(taskId) {
     const task = tasks.find(t => t.id === taskId);
+    const originalTask = currentTasks.find(t => t.id === taskId);
     if (!task) return;
     if (!hasRequiredFields(task)) {
       throw new Error('Name and title are required');
     }
 
+    const payload = {
+      memberOrder: task.memberOrder,
+      name: task.name,
+      title: task.title,
+      details: task.details,
+      veteranLogo: task.veteranLogo,
+    };
+
+    if (task.image !== originalTask?.image) {
+      payload.image = task.image;
+    }
+
     const response = await fetch(`${API_URL}/${taskId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        memberOrder: task.memberOrder,
-        name: task.name,
-        title: task.title,
-        details: task.details,
-        veteranLogo: task.veteranLogo,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
