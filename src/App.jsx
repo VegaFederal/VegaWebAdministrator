@@ -241,10 +241,31 @@ export default function App() {
 
   async function saveUpdatedTask(taskId) {
     const task = tasks.find(t => t.id === taskId);
-    if (!task || !hasRequiredFields(task)) return;
+    if (!task) return;
+    if (!hasRequiredFields(task)) {
+      throw new Error('Name and title are required');
+    }
 
-    //Waiting for update API
-    return {success: true,};
+    const response = await fetch(`${API_URL}/${taskId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        memberOrder: task.memberOrder,
+        name: task.name,
+        title: task.title,
+        details: task.details,
+        veteranLogo: task.veteranLogo,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
+    }
+
+    const savedMember = await response.json();
+    const mapped = memberToTask(savedMember);
+    setTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? mapped : t)));
+    setCurrentTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? mapped : t)));
   }
 
   async function saveCardOrder() {
