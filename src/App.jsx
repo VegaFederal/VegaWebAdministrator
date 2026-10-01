@@ -24,17 +24,14 @@ function memberToTask(member) {
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [currentTasks, setCurrentTasks] = useState([]);
-  const [isSavingCardOrder, setIsSavingCardOrder] = useState(false);
+  const [isSavingAll, setIsSavingAll] = useState(false);
   const [showCreateCardModal, setShowCreateModal] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [formError, setFormError] = useState('');
-  const fileInputRef = useRef(null);
   const [focusedTaskId, setFocusedTaskId] = useState(null);
-  // Keeps track of the active file reference for seamless saving
-  const [fileHandle, setFileHandle] = useState(null);
 
   const emptyDraft = {
       id: "",
@@ -65,6 +62,7 @@ export default function App() {
   const hasUnsavedCardOrder =
     orders.length !== currentOrders.length ||
     orders.some((order, index) => order.id !== currentOrders[index]?.id);
+  const allTasksHaveRequiredFields = tasks.every(hasRequiredFields);
   const unsavedChanges = hasUnsavedCardChanges || hasUnsavedCardOrder;
 
   useEffect(() => {
@@ -212,11 +210,7 @@ export default function App() {
     setTasks(prevTasks => prevTasks.map(task => (task.id === taskId ? { ...updatedTask, isDirty } : task)) );
   }
 
-  // Publishes a locally-created card to the live database + S3 via POST
-  async function saveTask(taskId) {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task || !hasRequiredFields(task)) return;
-
+  async function createTaskRequest(task) {
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -235,18 +229,10 @@ export default function App() {
     }
 
     const savedMember = await response.json();
-    setTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? memberToTask(savedMember) : t)));
-    setCurrentTasks(prevTasks => [...prevTasks, memberToTask(savedMember)]);
+    return memberToTask(savedMember);
   }
 
-  async function saveUpdatedTask(taskId) {
-    const task = tasks.find(t => t.id === taskId);
-    const originalTask = currentTasks.find(t => t.id === taskId);
-    if (!task) return;
-    if (!hasRequiredFields(task)) {
-      throw new Error('Name and title are required');
-    }
-
+  async function updateTaskRequest(task, originalTask) {
     const payload = {
       memberOrder: task.memberOrder,
       name: task.name,
@@ -259,7 +245,7 @@ export default function App() {
       payload.image = task.image;
     }
 
-    const response = await fetch(`${API_URL}/${taskId}`, {
+    const response = await fetch(`${API_URL}/${task.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -270,44 +256,53 @@ export default function App() {
     }
 
     const savedMember = await response.json();
-    const mapped = memberToTask(savedMember);
-    setTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? mapped : t)));
-    setCurrentTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? mapped : t)));
+    return memberToTask(savedMember);
   }
 
-  async function saveCardOrder() {
-    setIsSavingCardOrder(true);
+  async function saveCardOrder(taskList) {
+    const orderUpdates = taskList.map(task => ({
+      id: task.id,
+      memberOrder: task.memberOrder,
+    }));
 
-    try {
-      const response = await fetch(`${API_URL}/order`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ orders }),
-      });
+    const response = await fetch(`${API_URL}/order`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ orders: orderUpdates }),
+    });
 
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      const savedOrderById = new Map(
-        orders.map(order => [order.id, order.memberOrder])
-      );
-
-      setCurrentTasks(previousTasks =>
-        previousTasks.map(task => ({
-          ...task,
-          memberOrder: savedOrderById.get(task.id) ?? task.memberOrder,
-        }))
-      );
-
-      return result;
-    } finally {
-      setIsSavingCardOrder(false);
+    if (!response.ok) {
+      throw new Error(`API returned ${response.status}`);
     }
+
+    return response.json();
+  }
+
+  // Publishes a locally-created card to the live database + S3 via POST
+  async function saveTask(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !hasRequiredFields(task)) return;
+
+    const savedTask = await createTaskRequest(task);
+    setTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? savedTask : t)));
+    setCurrentTasks(prevTasks => [...prevTasks, savedTask]);
+    return savedTask;
+  }
+
+  async function saveUpdatedTask(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    const originalTask = currentTasks.find(t => t.id === taskId);
+    if (!task) return;
+    if (!hasRequiredFields(task)) {
+      throw new Error('Name, title, and image are required');
+    }
+
+    const savedTask = await updateTaskRequest(task, originalTask);
+    setTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? savedTask : t)));
+    setCurrentTasks(prevTasks => prevTasks.map(t => (t.id === taskId ? savedTask : t)));
+    return savedTask;
   }
 
   // Reorders tasks by drag position and renumbers memberOrder to match
@@ -324,96 +319,49 @@ export default function App() {
     });
   }
 
-  // CLEANUP UTIL: Formats active tasks neatly for JSON writing
-  const getCleanExportData = () => {
-    return tasks.map((task) => ({
-      id: task.id,
-      memberOrder: task.memberOrder,
-      image: task.image ?? "",
-      name: task.name ?? "Name",
-      title: task.title ?? "Title",
-      // Ensures fallback data follows the array pattern
-      details: Array.isArray(task.details) ? task.details : (task.details ? [task.details] : ["Questions"]),
-      veteranLogo: task.veteranLogo ?? null
-    }));
-  };
+  async function handleSaveAllCards() {
+    let workingTasks = [...tasks];
+    let workingCurrentTasks = [...currentTasks];
+    const shouldSaveOrder = hasUnsavedCardOrder;
 
-  // CORE UPDATE: Saves directly to the system JSON file
-  const handleSaveAllCards = async () => {
-    const freshData = JSON.stringify(getCleanExportData(), null, 2);
+    setIsSavingAll(true);
 
-    // If the browser supports native file picking & saving
-    if ('showSaveFilePicker' in window) {
-      try {
-        let currentHandle = fileHandle;
-        
-        // If we don't have a linked file context yet, prompt user to select/replace their json file
-        if (!currentHandle) {
-          const options = {
-            suggestedName: 'cards-data.json',
-            types: [{
-              description: 'JSON Files',
-              accept: { 'application/json': ['.json'] },
-            }],
-          };
-          currentHandle = await window.showSaveFilePicker(options);
-          setFileHandle(currentHandle);
-        }
-
-        // Overwrite the selected local file directly
-        const writable = await currentHandle.createWritable();
-        await writable.write(freshData);
-        await writable.close();
-        alert("Changes saved directly to your JSON file successfully!");
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.error("Direct save failed, using fallback anchor:", err);
-          runClassicDownloadFallback(freshData);
-        }
+    try {
+      const newTasks = workingTasks.filter(task => task.isNew);
+      for (const task of newTasks) {
+        const savedTask = await createTaskRequest(task);
+        workingTasks = workingTasks.map(currentTask =>
+          currentTask.id === task.id ? savedTask : currentTask
+        );
+        workingCurrentTasks = [...workingCurrentTasks, savedTask];
       }
-    } else {
-      // Standard browser fallback download behavior
-      runClassicDownloadFallback(freshData);
+
+      const updatedTasks = workingTasks.filter(task => !task.isNew && task.isDirty);
+      for (const task of updatedTasks) {
+        const originalTask = workingCurrentTasks.find(currentTask => currentTask.id === task.id);
+        const savedTask = await updateTaskRequest(task, originalTask);
+        workingTasks = workingTasks.map(currentTask =>
+          currentTask.id === task.id ? savedTask : currentTask
+        );
+        workingCurrentTasks = workingCurrentTasks.map(currentTask =>
+          currentTask.id === task.id ? savedTask : currentTask
+        );
+      }
+
+      if (shouldSaveOrder) {
+        await saveCardOrder(workingTasks);
+      }
+
+      setTasks(workingTasks);
+      setCurrentTasks(workingTasks);
+    } catch (error) {
+      setTasks(workingTasks);
+      setCurrentTasks(workingCurrentTasks);
+      alert(`Failed to save all changes: ${error.message}`);
+    } finally {
+      setIsSavingAll(false);
     }
-  };
-
-  const runClassicDownloadFallback = (jsonDataText) => {
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(jsonDataText)}`;
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', jsonString);
-    downloadAnchor.setAttribute('download', 'cards-data.json');
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
-
-  // Synchronize dynamic JSON uploads and remember its system handle
-  const handleUploadJson = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsedData = JSON.parse(event.target.result);
-        if (Array.isArray(parsedData)) {
-          setTasks(parsedData.map((t, index) => ({
-            ...t,
-            memberOrder: t.memberOrder ?? index + 1,
-            veteranLogo: t.veteranLogo ?? null // NEW: Ensures dynamic file parses safely support null defaults
-          })));
-          // Reset file handle on manual non-API upload streams
-          setFileHandle(null);
-        } else {
-          alert("Invalid file structure.");
-        }
-      } catch (error) {
-        alert("Error parsing JSON data.");
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
+  }
 
   if (isLoading) {
     return <div className="p-4 text-white">Loading team members…</div>;
@@ -432,22 +380,12 @@ export default function App() {
           <button onClick={openCardModal} className="cursor-pointer">
             + Add Card
           </button>
-          <button onClick={handleSaveAllCards} className="cursor-pointer">
-            Save All Cards Data
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleUploadJson}
-            accept=".json"
-            className="hidden"
-          />
           <button
-            onClick={saveCardOrder}
-            disabled={isSavingCardOrder || !hasUnsavedCardOrder || hasUnsavedCardChanges}
+            onClick={handleSaveAllCards}
+            disabled={isSavingAll || !unsavedChanges || !allTasksHaveRequiredFields}
             className="cursor-pointer"
           >
-            Save Card Order
+            {isSavingAll ? 'Saving All…' : 'Save All'}
           </button>
           {hasUnsavedCardOrder && (
             <label className="block text-lg font-bold text-yellow-400 bg-yellow-950 border border-yellow-500 rounded-md px-3 py-2">
@@ -457,6 +395,11 @@ export default function App() {
           {hasUnsavedCardChanges && (
             <label className="block text-lg font-bold text-red-500 bg-red-950 border border-red-500 rounded-md px-3 py-2">
               Unsaved Card Changes
+            </label>
+          )}
+          {!allTasksHaveRequiredFields && (
+            <label className="block text-lg font-bold text-red-500 bg-red-950 border border-red-500 rounded-md px-3 py-2">
+              Cards Missing Required Fields
             </label>
           )}
         </div>
