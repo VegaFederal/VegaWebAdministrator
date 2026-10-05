@@ -97,8 +97,8 @@ export function CreateCardModal({
             className="mt-1 w-full rounded-md border-2 border-grayscale-700 bg-grayscale-700 px-2 py-1 text-white shadow-lg outline-none"
             >
             <option value="">None (Null)</option>
-            <option value="vetArmy">Army</option>
-            <option value="vetNavy">Navy</option>
+            <option value="US_Army">Army</option>
+            <option value="US_Navy">Navy</option>
           </select> 
         </label>
 
