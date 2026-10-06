@@ -207,8 +207,8 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
           className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none"
         >
           <option value="">None (Null)</option>
-          <option value="vetArmy">Army</option>
-          <option value="vetNavy">Navy</option>
+          <option value="US_Army">Army</option>
+          <option value="US_Navy">Navy</option>
         </select>
       </div>
 
