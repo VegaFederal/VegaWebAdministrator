@@ -10,6 +10,11 @@ table = dynamodb.Table(os.environ['TABLE_NAME'])
 s3 = boto3.client('s3')
 BUCKET_NAME = os.environ.get('BUCKET_NAME', '')
 ALLOWED_ORIGIN = os.environ.get('ALLOWED_ORIGIN', '')
+VETERAN_LOGO_URLS = {
+    'US_Army': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Army.png',
+    'US_Navy': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Navy.png',
+}
+VETERAN_LOGO_NAMES = {url: name for name, url in VETERAN_LOGO_URLS.items()}
 
 
 def decimal_to_native(obj):
@@ -20,6 +25,20 @@ def decimal_to_native(obj):
     if isinstance(obj, Decimal):
         return int(obj) if obj % 1 == 0 else float(obj)
     return obj
+
+
+def veteran_logo_url(value):
+    if value is None:
+        return None
+    return VETERAN_LOGO_URLS[value]
+
+
+def team_member_for_response(member):
+    response_member = dict(member)
+    logo_url = response_member.get('veteranLogo')
+    if logo_url in VETERAN_LOGO_NAMES:
+        response_member['veteranLogo'] = VETERAN_LOGO_NAMES[logo_url]
+    return decimal_to_native(response_member)
 
 
 def upload_image_data_url(data_url):
@@ -97,7 +116,7 @@ def get_team_members():
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
-        "body": json.dumps(decimal_to_native(members))
+        "body": json.dumps([team_member_for_response(member) for member in members])
     }
 
 
@@ -177,7 +196,11 @@ def update_team_member(event):
         'image': new_image_url,
     }
 
-    logo = body['veteranLogo'] if 'veteranLogo' in body else existing.get('veteranLogo')
+    if 'veteranLogo' in body:
+        logo = veteran_logo_url(body['veteranLogo'])
+    else:
+        logo = existing.get('veteranLogo')
+
     if logo:
         item['veteranLogo'] = logo
 
@@ -203,12 +226,14 @@ def update_team_member(event):
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
-        "body": json.dumps(decimal_to_native(item))
+        "body": json.dumps(team_member_for_response(item))
     }
 
 
 def create_team_member(event):
     body = json.loads(event.get('body') or '{}')
+
+    logo = veteran_logo_url(body.get('veteranLogo'))
 
     image_url = body.get('image') or ''
     if image_url.startswith('data:'):
@@ -224,7 +249,7 @@ def create_team_member(event):
         'name': body.get('name', 'Name'),
         'title': body.get('title', 'Title'),
         'details': body.get('details') or [],
-        'veteranLogo': body.get('veteranLogo'),
+        'veteranLogo': logo,
         'image': image_url,
     }
     table.put_item(Item=item)
@@ -232,7 +257,7 @@ def create_team_member(event):
     return {
         "statusCode": 201,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
-        "body": json.dumps(item)
+        "body": json.dumps(team_member_for_response(item))
     }
 
 def update_card_order(event):
