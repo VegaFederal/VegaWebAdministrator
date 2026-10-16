@@ -102,14 +102,49 @@ Resources:
       ExplicitAuthFlows:
         - ALLOW_REFRESH_TOKEN_AUTH
 
-  # Cognito-managed hosted UI subdomain 
-  # Domain prefix must be globally unique; combining stack name + account ID
+  # Cognito-managed hosted UI subdomain
+  # Domain prefix must be globally unique; combining environment + account ID
   # guarantees uniqueness across deployments.
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
       Domain: !Sub "vegawebadmin-${Environment}-${AWS::AccountId}"
       UserPoolId: !Ref UserPool
+
+  # ── SSM Parameters — written here so branch stacks can read them ──────────
+  # Branch deployments never create their own Cognito stack. Instead they read
+  # these SSM parameters to discover the shared main-branch User Pool.
+  SsmUserPoolId:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /vegawebadmin/shared/cognito/UserPoolId
+      Type: String
+      Value: !Ref UserPool
+      Description: Shared Cognito User Pool ID (main branch) — read by branch deployments
+
+  SsmAppClientId:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /vegawebadmin/shared/cognito/AppClientId
+      Type: String
+      Value: !Ref UserPoolClient
+      Description: Shared Cognito App Client ID (main branch) — read by branch deployments
+
+  SsmCognitoHostedUIDomain:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /vegawebadmin/shared/cognito/HostedUIDomain
+      Type: String
+      Value: !Sub "https://vegawebadmin-${Environment}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com"
+      Description: Shared Cognito Hosted UI base URL — read by branch deployments
+
+  SsmIdpResponseUrl:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /vegawebadmin/shared/cognito/IdpResponseUrl
+      Type: String
+      Value: !Sub "https://vegawebadmin-${Environment}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com/oauth2/idpresponse"
+      Description: Redirect URI to register once in the Google OAuth client
 
 Outputs:
   UserPoolId:

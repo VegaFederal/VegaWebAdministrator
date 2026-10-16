@@ -93,8 +93,12 @@ Parameters:
 
 Conditions:
   HasVpcConfig: !Not [!Equals [!Ref VpcId, '']]
-  # Cognito stack is only deployed once CallbackUrl is known (second CI pass)
+  # Cognito is only deployed on the main branch — all other branches share it
   HasCognitoConfig: !Not [!Equals [!Ref CallbackUrl, '']]
+  IsMainBranch: !Equals [!Ref Environment, 'main']
+  DeployCognito: !And
+    - !Condition HasCognitoConfig
+    - !Condition IsMainBranch
 
 Resources:
   # Secrets stack for Google SSO.
@@ -151,10 +155,11 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # Cognito Stack — deployed after StaticWebsiteStack so CallbackUrl is known
+  # Cognito Stack — only deployed on the main branch.
+  # All branch stacks share this User Pool via SSM parameters.
   CognitoStack:
     Type: AWS::CloudFormation::Stack
-    Condition: HasCognitoConfig
+    Condition: DeployCognito
     DependsOn: StaticWebsiteStack
     Properties:
       TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/cognito.yaml
@@ -208,21 +213,21 @@ Outputs:
     Value: !GetAtt SecretsStack.Outputs.OriginVerifySecretArn
 
   UserPoolId:
-    Condition: HasCognitoConfig
+    Condition: DeployCognito
     Description: Cognito User Pool ID
     Value: !GetAtt CognitoStack.Outputs.UserPoolId
 
   AppClientId:
-    Condition: HasCognitoConfig
+    Condition: DeployCognito
     Description: Cognito App Client ID
     Value: !GetAtt CognitoStack.Outputs.AppClientId
 
   CognitoHostedUIDomain:
-    Condition: HasCognitoConfig
+    Condition: DeployCognito
     Description: Cognito Hosted UI base URL
     Value: !GetAtt CognitoStack.Outputs.CognitoHostedUIDomain
 
   IdpResponseUrl:
-    Condition: HasCognitoConfig
+    Condition: DeployCognito
     Description: Redirect URI to add to the Google OAuth client after first deploy
     Value: !GetAtt CognitoStack.Outputs.IdpResponseUrl
