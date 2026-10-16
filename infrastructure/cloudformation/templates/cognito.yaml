@@ -28,11 +28,87 @@ Parameters:
     Type: String
     Description: Post-logout redirect URL (same base domain as CallbackUrl, path /)
 
+  # Empty in dev (pass-through). Set to a Google Group email in prod to restrict access.
+  AllowedGroupEmail:
+    Type: String
+    Default: ""
+    Description: >
+      Google Group email whose members are allowed (e.g. admin-team@vegafederal.com).
+      Empty = pass-through mode (dev). Set in production-config.json for prod.
+
+  GoogleServiceAccountSecretArn:
+    Type: String
+    Description: ARN of the Secrets Manager secret containing the Google service-account JSON
+
+  DeploymentBucket:
+    Type: String
+    Description: S3 bucket containing Lambda deployment ZIPs
+
 Resources:
 
-  # ── User Pool ─────────────────────────────────────────────────────────────
+  # Group-check Lambda IAM role
+  GroupCheckLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "VegaWebAdmin-GroupCheck-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ReadGoogleServiceAccountSecret
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref GoogleServiceAccountSecretArn
+
+  # Group-check Lambda function 
+  # In dev (ALLOWED_GROUP_EMAIL empty) this is a pass-through.
+  # In prod it calls the Google Directory API to verify group membership.
+  GroupCheckFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "VegaWebAdmin-GroupCheck-${Environment}"
+      Description: >
+        Cognito pre-token-generation trigger. Dev = pass-through.
+        Prod = verifies user is a member of ALLOWED_GROUP_EMAIL via Directory API.
+      Runtime: python3.12
+      Role: !GetAtt GroupCheckLambdaRole.Arn
+      Handler: index.handler
+      Timeout: 10
+      MemorySize: 256
+      Environment:
+        Variables:
+          ALLOWED_GROUP_EMAIL: !Ref AllowedGroupEmail
+          SERVICE_ACCOUNT_SECRET_ARN: !Ref GoogleServiceAccountSecretArn
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: !Sub "${Environment}/lambda/group-check/index.zip"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Allow Cognito to invoke the group-check Lambda
+  GroupCheckLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt GroupCheckFunction.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  #  User Pool 
   UserPool:
     Type: AWS::Cognito::UserPool
+    DependsOn: GroupCheckFunction
     Properties:
       UserPoolName: !Sub "VegaWebAdmin-${Environment}"
       UsernameAttributes:
@@ -46,10 +122,12 @@ Resources:
           AttributeDataType: String
           Required: true
           Mutable: true
+      LambdaConfig:
+        PreTokenGeneration: !GetAtt GroupCheckFunction.Arn
       UserPoolTags:
         Environment: !Ref Environment
 
-  # ── Google Identity Provider ───────────────────────────────────────────────
+  #  Google Identity Provider
   GoogleIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
     Properties:
@@ -104,7 +182,7 @@ Resources:
       Domain: !Sub "vegawebadmin-${Environment}-${AWS::AccountId}"
       UserPoolId: !Ref UserPool
 
-  # ── SSM Parameters — written here so branch stacks can read them ──────────
+  #  SSM Parameters — written here so branch stacks can read them 
   # Branch deployments never create their own Cognito stack. Instead they read
   # these SSM parameters to discover the shared main-branch User Pool.
   SsmUserPoolId:

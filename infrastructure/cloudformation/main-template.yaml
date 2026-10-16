@@ -66,13 +66,20 @@ Parameters:
     Type: String
     Default: ""
     NoEcho: true
-    Description: Google OAuth client ID (read from Secrets Manager in CI)
+    Description: Google OAuth client ID (read from GitHub Actions secret in CI)
 
   GoogleOAuthClientSecret:
     Type: String
     Default: ""
     NoEcho: true
-    Description: Google OAuth client secret (read from Secrets Manager in CI)
+    Description: Google OAuth client secret (read from GitHub Actions secret in CI)
+
+  AllowedGroupEmail:
+    Type: String
+    Default: ""
+    Description: >
+      Google Group email for prod group-membership enforcement.
+      Empty = dev pass-through. Set in production-config.json for prod.
 
   CallbackUrl:
     Type: String
@@ -164,6 +171,9 @@ Resources:
         GoogleOAuthClientSecret: !Ref GoogleOAuthClientSecret
         CallbackUrl: !Ref CallbackUrl
         LogoutUrl: !Ref LogoutUrl
+        AllowedGroupEmail: !Ref AllowedGroupEmail
+        GoogleServiceAccountSecretArn: !GetAtt SecretsStack.Outputs.GoogleServiceAccountSecretArn
+        DeploymentBucket: !Ref DeploymentBucket
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -205,6 +215,10 @@ Outputs:
   OriginVerifySecretArn:
     Description: ARN of the auto-generated origin-verify secret
     Value: !GetAtt SecretsStack.Outputs.OriginVerifySecretArn
+
+  GoogleServiceAccountSecretArn:
+    Description: ARN of the Google service-account secret (populate manually after first deploy)
+    Value: !GetAtt SecretsStack.Outputs.GoogleServiceAccountSecretArn
 
   UserPoolId:
     Condition: DeployCognito
