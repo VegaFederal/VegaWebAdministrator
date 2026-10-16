@@ -233,6 +233,9 @@ jobs:
           zip index.zip index.py
           aws s3 cp index.zip s3://$TEMPLATE_BUCKET/$ENVIRONMENT/lambda/team-members/index.zip
 
+      # ── Pass 1: deploy infrastructure without Cognito.
+      #    CallbackUrl is empty so the CognitoStack condition is false and it is skipped.
+      #    CloudFront gets created here and we can read its domain after this step.
       - name: Deploy CloudFormation stack
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
@@ -246,7 +249,68 @@ jobs:
             DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
             TableName=${{ env.DB_TABLE_NAME }},
             TableArn=${{ env.DB_TABLE_ARN }},
-            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }}
+            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
+            AllowedGoogleDomain=vegafederal.com,
+            CallbackUrl=,
+            LogoutUrl=
+          no-fail-on-empty-changeset: "1"
+          capabilities: "CAPABILITY_NAMED_IAM"
+
+      # ── Resolve CloudFront domain then build the Cognito callback URLs ────
+      - name: Resolve CloudFront domain
+        run: |
+          CF_DOMAIN=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" \
+            --output text)
+          echo "CF_DOMAIN=$CF_DOMAIN" >> $GITHUB_ENV
+          echo "CALLBACK_URL=https://${CF_DOMAIN}/callback" >> $GITHUB_ENV
+          echo "LOGOUT_URL=https://${CF_DOMAIN}/" >> $GITHUB_ENV
+
+      # ── Read Google OAuth credentials from Secrets Manager ───────────────
+      - name: Read Google OAuth credentials
+        run: |
+          GOOGLE_OAUTH_SECRET_ARN=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='GoogleOAuthSecretArn'].OutputValue" \
+            --output text)
+          GOOGLE_OAUTH_JSON=$(aws secretsmanager get-secret-value \
+            --secret-id "$GOOGLE_OAUTH_SECRET_ARN" \
+            --query SecretString --output text)
+          GOOGLE_CLIENT_ID=$(echo "$GOOGLE_OAUTH_JSON" | jq -r '.client_id')
+          GOOGLE_CLIENT_SECRET=$(echo "$GOOGLE_OAUTH_JSON" | jq -r '.client_secret')
+
+          if [ "$GOOGLE_CLIENT_ID" = "REPLACE_ME" ] || [ -z "$GOOGLE_CLIENT_ID" ]; then
+            echo "ERROR: Google OAuth credentials have not been set in Secrets Manager."
+            echo "Open Secrets Manager in the AWS console, find ${GOOGLE_OAUTH_SECRET_ARN},"
+            echo "and replace the placeholder values with your real client_id and client_secret."
+            exit 1
+          fi
+
+          echo "::add-mask::$GOOGLE_CLIENT_SECRET"
+          echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" >> $GITHUB_ENV
+          echo "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET" >> $GITHUB_ENV
+
+      # ── Pass 2: re-deploy with CallbackUrl known so Cognito is created ────
+      - name: Deploy CloudFormation stack — pass 2 (with Cognito)
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: ${{ env.STACK_NAME }}
+          template: infrastructure/cloudformation/main-template.yaml
+          parameter-overrides: >-
+            Environment=${{ env.ENVIRONMENT }},
+            VpcId=${{ env.VPC_ID }},
+            SubnetIds=${{ env.SUBNET_IDS }},
+            TemplateBucket=${{ env.TEMPLATE_BUCKET }},
+            DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
+            TableName=${{ env.DB_TABLE_NAME }},
+            TableArn=${{ env.DB_TABLE_ARN }},
+            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
+            AllowedGoogleDomain=vegafederal.com,
+            CallbackUrl=${{ env.CALLBACK_URL }},
+            LogoutUrl=${{ env.LOGOUT_URL }},
+            GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
+            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
@@ -277,12 +341,29 @@ jobs:
           DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" --output text)
           aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"
 
-      - name: Get CloudFront URL
+      - name: Print deployment summary
         run: |
-          CF_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" --output text)
-          echo "Branch: ${{ env.BRANCH_NAME }} deployed as environment: ${{ env.ENVIRONMENT }}"
-          echo "Your website is available at: https://$CF_URL"
-          echo "Team members API: $API_URL"
+          IDP_RESPONSE_URL=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='IdpResponseUrl'].OutputValue" \
+            --output text 2>/dev/null || echo "")
+          COGNITO_DOMAIN=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='CognitoHostedUIDomain'].OutputValue" \
+            --output text 2>/dev/null || echo "")
+
+          echo "========================================"
+          echo "Branch:      ${{ env.BRANCH_NAME }}"
+          echo "Environment: ${{ env.ENVIRONMENT }}"
+          echo "App URL:     https://${{ env.CF_DOMAIN }}"
+          echo "API URL:     $API_URL"
+          if [ -n "$COGNITO_DOMAIN" ]; then
+            echo "Cognito UI:  $COGNITO_DOMAIN"
+            echo "----------------------------------------"
+            echo "ACTION REQUIRED — add this URI to the Google OAuth client:"
+            echo "  $IDP_RESPONSE_URL"
+          fi
+          echo "========================================"
 
   deploy-production:
     if: github.event.inputs.action == 'deploy-production' || (github.ref == 'refs/heads/production' && github.event_name == 'push')

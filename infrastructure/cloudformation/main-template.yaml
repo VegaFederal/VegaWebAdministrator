@@ -61,8 +61,40 @@ Parameters:
     Default: ""
     Description: Allowed site origin for Lambda (e.g. https://d123.cloudfront.net or https://vegafederal.com)
 
+  # Cognito / Google SSO 
+  GoogleOAuthClientId:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Google OAuth client ID (read from Secrets Manager in CI)
+
+  GoogleOAuthClientSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: Google OAuth client secret (read from Secrets Manager in CI)
+
+  AllowedGoogleDomain:
+    Type: String
+    Default: "vegafederal.com"
+    Description: Restrict Cognito sign-in to this hosted domain. dev = vegafederal.com, prod = ""
+
+  CallbackUrl:
+    Type: String
+    Default: ""
+    Description: >
+      Cognito OAuth callback URL. Resolved in CI from the CloudFront domain output
+      after the first deploy. Empty on first deploy — Cognito stack is skipped until known.
+
+  LogoutUrl:
+    Type: String
+    Default: ""
+    Description: Post-logout redirect URL (same base domain as CallbackUrl, path /)
+
 Conditions:
   HasVpcConfig: !Not [!Equals [!Ref VpcId, '']]
+  # Cognito stack is only deployed once CallbackUrl is known (second CI pass)
+  HasCognitoConfig: !Not [!Equals [!Ref CallbackUrl, '']]
 
 Resources:
   # Secrets stack for Google SSO.
@@ -119,6 +151,24 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
+  # Cognito Stack — deployed after StaticWebsiteStack so CallbackUrl is known
+  CognitoStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: HasCognitoConfig
+    DependsOn: StaticWebsiteStack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/cognito.yaml
+      Parameters:
+        Environment: !Ref Environment
+        GoogleOAuthClientId: !Ref GoogleOAuthClientId
+        GoogleOAuthClientSecret: !Ref GoogleOAuthClientSecret
+        AllowedGoogleDomain: !Ref AllowedGoogleDomain
+        CallbackUrl: !Ref CallbackUrl
+        LogoutUrl: !Ref LogoutUrl
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
 Outputs:
   # Your outputs will go here
 
@@ -160,3 +210,23 @@ Outputs:
   OriginVerifySecretArn:
     Description: ARN of the auto-generated origin-verify secret
     Value: !GetAtt SecretsStack.Outputs.OriginVerifySecretArn
+
+  UserPoolId:
+    Condition: HasCognitoConfig
+    Description: Cognito User Pool ID
+    Value: !GetAtt CognitoStack.Outputs.UserPoolId
+
+  AppClientId:
+    Condition: HasCognitoConfig
+    Description: Cognito App Client ID
+    Value: !GetAtt CognitoStack.Outputs.AppClientId
+
+  CognitoHostedUIDomain:
+    Condition: HasCognitoConfig
+    Description: Cognito Hosted UI base URL
+    Value: !GetAtt CognitoStack.Outputs.CognitoHostedUIDomain
+
+  IdpResponseUrl:
+    Condition: HasCognitoConfig
+    Description: Redirect URI to add to the Google OAuth client after first deploy
+    Value: !GetAtt CognitoStack.Outputs.IdpResponseUrl

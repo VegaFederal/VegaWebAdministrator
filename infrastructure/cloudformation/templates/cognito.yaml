@@ -1,0 +1,137 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Cognito User Pool with Google Workspace as the identity provider.
+  Restricts sign-in to @vegafederal.com via the hosted domain constraint.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: The deployment environment
+
+  GoogleOAuthClientId:
+    Type: String
+    NoEcho: true
+    Description: Google OAuth client ID (read from Secrets Manager in CI)
+
+  GoogleOAuthClientSecret:
+    Type: String
+    NoEcho: true
+    Description: Google OAuth client secret (read from Secrets Manager in CI)
+
+  # dev = vegafederal.com  |  prod = "" (group check handles restriction instead)
+  AllowedGoogleDomain:
+    Type: String
+    Default: "vegafederal.com"
+    Description: >
+      Restrict sign-in to users from this Google hosted domain.
+      Dev = vegafederal.com. Leave empty for prod (group-check Lambda enforces instead).
+
+  # Resolved in CI from the CloudFront stack output after first deploy.
+  # dev:  https://<cloudfront-domain>/callback
+  # prod: https://admin.vegafederal.com/callback
+  CallbackUrl:
+    Type: String
+    Description: OAuth callback URL registered on the Cognito App Client
+
+  LogoutUrl:
+    Type: String
+    Description: Post-logout redirect URL (same base domain as CallbackUrl, path /)
+
+Resources:
+
+  # ── User Pool ─────────────────────────────────────────────────────────────
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "VegaWebAdmin-${Environment}"
+      UsernameAttributes:
+        - email
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      AutoVerifiedAttributes:
+        - email
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+      UserPoolTags:
+        Environment: !Ref Environment
+
+  # ── Google Identity Provider ───────────────────────────────────────────────
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleOAuthClientId
+        client_secret: !Ref GoogleOAuthClientSecret
+        authorize_scopes: "openid email profile"
+        hd: !Ref AllowedGoogleDomain
+      AttributeMapping:
+        email: email
+        given_name: given_name
+        family_name: family_name
+        picture: picture
+        username: sub
+
+  # User Pool App Client 
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: GoogleIdentityProvider
+    Properties:
+      ClientName: !Sub "VegaWebAdmin-Client-${Environment}"
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      CallbackURLs:
+        - !Ref CallbackUrl
+      LogoutURLs:
+        - !Ref LogoutUrl
+      SupportedIdentityProviders:
+        - Google
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  # Cognito-managed hosted UI subdomain 
+  # Domain prefix must be globally unique; combining stack name + account ID
+  # guarantees uniqueness across deployments.
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "vegawebadmin-${Environment}-${AWS::AccountId}"
+      UserPoolId: !Ref UserPool
+
+Outputs:
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub "${AWS::StackName}-UserPoolId"
+
+  AppClientId:
+    Description: Cognito App Client ID
+    Value: !Ref UserPoolClient
+    Export:
+      Name: !Sub "${AWS::StackName}-AppClientId"
+
+  CognitoHostedUIDomain:
+    Description: Cognito Hosted UI base URL (no trailing slash)
+    Value: !Sub "https://vegawebadmin-${Environment}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com"
+    Export:
+      Name: !Sub "${AWS::StackName}-CognitoHostedUIDomain"
+
+  IdpResponseUrl:
+    Description: >
+      Redirect URI to register in the Google OAuth client under
+      "Authorized redirect URIs" — add this after the first deploy.
+    Value: !Sub "https://vegawebadmin-${Environment}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com/oauth2/idpresponse"
