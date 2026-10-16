@@ -1,7 +1,8 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Cognito User Pool with Google Workspace as the identity provider.
-  Restricts sign-in to @vegafederal.com via the hosted domain constraint.
+  Domain restriction is enforced via Internal OAuth consent screen and
+  the pre-token-generation Lambda (S3).
 
 Parameters:
   Environment:
@@ -12,24 +13,13 @@ Parameters:
   GoogleOAuthClientId:
     Type: String
     NoEcho: true
-    Description: Google OAuth client ID (read from Secrets Manager in CI)
+    Description: Google OAuth client ID (read from GitHub Actions secret in CI)
 
   GoogleOAuthClientSecret:
     Type: String
     NoEcho: true
-    Description: Google OAuth client secret (read from Secrets Manager in CI)
+    Description: Google OAuth client secret (read from GitHub Actions secret in CI)
 
-  # dev = vegafederal.com  |  prod = "" (group check handles restriction instead)
-  AllowedGoogleDomain:
-    Type: String
-    Default: "vegafederal.com"
-    Description: >
-      Restrict sign-in to users from this Google hosted domain.
-      Dev = vegafederal.com. Leave empty for prod (group-check Lambda enforces instead).
-
-  # Resolved in CI from the CloudFront stack output after first deploy.
-  # dev:  https://<cloudfront-domain>/callback
-  # prod: https://admin.vegafederal.com/callback
   CallbackUrl:
     Type: String
     Description: OAuth callback URL registered on the Cognito App Client
@@ -70,7 +60,10 @@ Resources:
         client_id: !Ref GoogleOAuthClientId
         client_secret: !Ref GoogleOAuthClientSecret
         authorize_scopes: "openid email profile"
-        hd: !Ref AllowedGoogleDomain
+        # Note: domain restriction is NOT done here — Cognito rejects unknown keys.
+        # Restriction is enforced at two levels instead:
+        # 1. Google OAuth consent screen is set to Internal (Workspace-only)
+        # 2. Pre-token-generation Lambda (S3) verifies @vegafederal.com on the email claim
       AttributeMapping:
         email: email
         given_name: given_name

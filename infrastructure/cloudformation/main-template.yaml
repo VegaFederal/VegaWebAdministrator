@@ -74,11 +74,6 @@ Parameters:
     NoEcho: true
     Description: Google OAuth client secret (read from Secrets Manager in CI)
 
-  AllowedGoogleDomain:
-    Type: String
-    Default: "vegafederal.com"
-    Description: Restrict Cognito sign-in to this hosted domain. dev = vegafederal.com, prod = ""
-
   CallbackUrl:
     Type: String
     Default: ""
@@ -167,7 +162,6 @@ Resources:
         Environment: !Ref Environment
         GoogleOAuthClientId: !Ref GoogleOAuthClientId
         GoogleOAuthClientSecret: !Ref GoogleOAuthClientSecret
-        AllowedGoogleDomain: !Ref AllowedGoogleDomain
         CallbackUrl: !Ref CallbackUrl
         LogoutUrl: !Ref LogoutUrl
       Tags:

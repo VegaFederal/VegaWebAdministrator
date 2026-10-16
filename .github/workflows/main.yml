@@ -323,7 +323,6 @@ jobs:
             TableName=${{ env.DB_TABLE_NAME }},
             TableArn=${{ env.DB_TABLE_ARN }},
             AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
-            AllowedGoogleDomain=vegafederal.com,
             CallbackUrl=,
             LogoutUrl=
           no-fail-on-empty-changeset: "1"
@@ -367,7 +366,6 @@ jobs:
             TableName=${{ env.DB_TABLE_NAME }},
             TableArn=${{ env.DB_TABLE_ARN }},
             AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
-            AllowedGoogleDomain=vegafederal.com,
             CallbackUrl=${{ env.CALLBACK_URL }},
             LogoutUrl=${{ env.LOGOUT_URL }},
             GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
