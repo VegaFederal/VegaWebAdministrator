@@ -46,7 +46,7 @@ Parameters:
 
 Resources:
 
-  # ── Group-check Lambda IAM role ───────────────────────────────────────────
+  # Group-check Lambda IAM role
   GroupCheckLambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -70,7 +70,7 @@ Resources:
                   - secretsmanager:GetSecretValue
                 Resource: !Ref GoogleServiceAccountSecretArn
 
-  # ── Group-check Lambda function ───────────────────────────────────────────
+  # Group-check Lambda function 
   # In dev (ALLOWED_GROUP_EMAIL empty) this is a pass-through.
   # In prod it calls the Google Directory API to verify group membership.
   GroupCheckFunction:
@@ -105,7 +105,7 @@ Resources:
       Principal: cognito-idp.amazonaws.com
       SourceArn: !GetAtt UserPool.Arn
 
-  # ── User Pool ─────────────────────────────────────────────────────────────
+  #  User Pool 
   UserPool:
     Type: AWS::Cognito::UserPool
     DependsOn: GroupCheckFunction
@@ -127,7 +127,7 @@ Resources:
       UserPoolTags:
         Environment: !Ref Environment
 
-  # ── Google Identity Provider ───────────────────────────────────────────────
+  #  Google Identity Provider
   GoogleIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
     Properties:
@@ -182,7 +182,7 @@ Resources:
       Domain: !Sub "vegawebadmin-${Environment}-${AWS::AccountId}"
       UserPoolId: !Ref UserPool
 
-  # ── SSM Parameters — written here so branch stacks can read them ──────────
+  #  SSM Parameters — written here so branch stacks can read them 
   # Branch deployments never create their own Cognito stack. Instead they read
   # these SSM parameters to discover the shared main-branch User Pool.
   SsmUserPoolId:
