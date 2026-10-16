@@ -65,6 +65,17 @@ Conditions:
   HasVpcConfig: !Not [!Equals [!Ref VpcId, '']]
 
 Resources:
+  # Secrets stack for Google SSO.
+  SecretsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/secrets.yaml
+      Parameters:
+        Environment: !Ref Environment
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
   # Security Groups Stack
   SecurityGroupsStack:
     Type: AWS::CloudFormation::Stack
@@ -141,3 +152,11 @@ Outputs:
   ApiEndpoint:
     Description: Team Members API endpoint URL
     Value: !GetAtt ApiLambdaStack.Outputs.ApiEndpoint
+
+  GoogleOAuthSecretArn:
+    Description: ARN of the Google OAuth secret (populate client_id/secret manually in the console)
+    Value: !GetAtt SecretsStack.Outputs.GoogleOAuthSecretArn
+
+  OriginVerifySecretArn:
+    Description: ARN of the auto-generated origin-verify secret
+    Value: !GetAtt SecretsStack.Outputs.OriginVerifySecretArn
