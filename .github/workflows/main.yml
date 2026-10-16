@@ -122,6 +122,70 @@ jobs:
             aws s3 rb s3://${{ env.TEMPLATE_BUCKET }} --force || true
           fi
 
+      - name: Remove branch callback URL from shared Cognito User Pool Client
+        run: |
+          USER_POOL_ID=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/cognito/UserPoolId" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "")
+          APP_CLIENT_ID=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/cognito/AppClientId" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "")
+
+          if [ -z "$USER_POOL_ID" ] || [ -z "$APP_CLIENT_ID" ]; then
+            echo "Shared Cognito pool not found in SSM — nothing to clean up."
+            exit 0
+          fi
+
+          WEBSITE_BUCKET="${{ env.WEBSITE_BUCKET }}"
+          if [ -z "$WEBSITE_BUCKET" ]; then
+            echo "No website bucket found — cannot determine CloudFront domain. Skipping."
+            exit 0
+          fi
+
+          # Derive the CloudFront domain from the stack outputs (already retrieved above)
+          CF_DOMAIN=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" \
+            --output text 2>/dev/null || echo "")
+
+          if [ -z "$CF_DOMAIN" ]; then
+            echo "Could not resolve CloudFront domain — skipping callback removal."
+            exit 0
+          fi
+
+          STALE_CALLBACK="https://${CF_DOMAIN}/callback"
+          STALE_LOGOUT="https://${CF_DOMAIN}/"
+
+          CURRENT=$(aws cognito-idp describe-user-pool-client \
+            --user-pool-id "$USER_POOL_ID" \
+            --client-id "$APP_CLIENT_ID" \
+            --query "UserPoolClient" --output json)
+
+          NEW_CALLBACKS=$(echo "$CURRENT" | jq --arg url "$STALE_CALLBACK" \
+            '[.CallbackURLs[] | select(. != $url)]')
+          NEW_LOGOUTS=$(echo "$CURRENT" | jq --arg url "$STALE_LOGOUT" \
+            '[.LogoutURLs[] | select(. != $url)]')
+
+          # Cognito requires at least one callback URL — guard against empty list
+          CB_COUNT=$(echo "$NEW_CALLBACKS" | jq 'length')
+          if [ "$CB_COUNT" -eq 0 ]; then
+            echo "Removal would leave zero callback URLs — skipping to avoid breaking the client."
+            exit 0
+          fi
+
+          aws cognito-idp update-user-pool-client \
+            --user-pool-id "$USER_POOL_ID" \
+            --client-id "$APP_CLIENT_ID" \
+            --allowed-o-auth-flows code \
+            --allowed-o-auth-flows-user-pool-client \
+            --allowed-o-auth-scopes openid email profile \
+            --supported-identity-providers Google \
+            --explicit-auth-flows ALLOW_REFRESH_TOKEN_AUTH \
+            --callback-urls "$NEW_CALLBACKS" \
+            --logout-urls "$NEW_LOGOUTS"
+
+          echo "Removed $STALE_CALLBACK from User Pool Client $APP_CLIENT_ID"
+
   deploy:
     if: (github.event_name == 'push' && github.event.commits[0] != null) || (github.event.inputs.action == 'deploy')
     runs-on: ubuntu-latest
@@ -233,7 +297,19 @@ jobs:
           zip index.zip index.py
           aws s3 cp index.zip s3://$TEMPLATE_BUCKET/$ENVIRONMENT/lambda/team-members/index.zip
 
-      - name: Deploy CloudFormation stack
+      #  Determine if this is the main branch 
+      - name: Set branch type
+        run: |
+          if [ "${{ env.ENVIRONMENT }}" = "main" ]; then
+            echo "IS_MAIN_BRANCH=true" >> $GITHUB_ENV
+          else
+            echo "IS_MAIN_BRANCH=false" >> $GITHUB_ENV
+          fi
+
+      # ── Pass 1: deploy infrastructure without Cognito.
+      #    CallbackUrl is empty so DeployCognito condition is false — Cognito skipped.
+      #    CloudFront is created here and its domain is read after this step.
+      - name: Deploy CloudFormation stack — pass 1
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
           name: ${{ env.STACK_NAME }}
@@ -246,9 +322,115 @@ jobs:
             DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
             TableName=${{ env.DB_TABLE_NAME }},
             TableArn=${{ env.DB_TABLE_ARN }},
-            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }}
+            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
+            AllowedGoogleDomain=vegafederal.com,
+            CallbackUrl=,
+            LogoutUrl=
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
+
+      #  Resolve CloudFront domain 
+      - name: Resolve CloudFront domain
+        run: |
+          CF_DOMAIN=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" \
+            --output text)
+          echo "CF_DOMAIN=$CF_DOMAIN" >> $GITHUB_ENV
+          echo "CALLBACK_URL=https://${CF_DOMAIN}/callback" >> $GITHUB_ENV
+          echo "LOGOUT_URL=https://${CF_DOMAIN}/" >> $GITHUB_ENV
+
+      #  MAIN BRANCH ONLY: validate credentials and deploy Cognito 
+      - name: Validate Google OAuth credentials
+        if: env.IS_MAIN_BRANCH == 'true'
+        run: |
+          if [ -z "${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" ]; then
+            echo "ERROR: GOOGLE_OAUTH_CLIENT_ID GitHub Actions secret is not set."
+            exit 1
+          fi
+          echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" >> $GITHUB_ENV
+          echo "::add-mask::${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}"
+          echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" >> $GITHUB_ENV
+
+      - name: Deploy CloudFormation stack — pass 2 (main branch — creates Cognito)
+        if: env.IS_MAIN_BRANCH == 'true'
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: ${{ env.STACK_NAME }}
+          template: infrastructure/cloudformation/main-template.yaml
+          parameter-overrides: >-
+            Environment=${{ env.ENVIRONMENT }},
+            VpcId=${{ env.VPC_ID }},
+            SubnetIds=${{ env.SUBNET_IDS }},
+            TemplateBucket=${{ env.TEMPLATE_BUCKET }},
+            DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
+            TableName=${{ env.DB_TABLE_NAME }},
+            TableArn=${{ env.DB_TABLE_ARN }},
+            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
+            AllowedGoogleDomain=vegafederal.com,
+            CallbackUrl=${{ env.CALLBACK_URL }},
+            LogoutUrl=${{ env.LOGOUT_URL }},
+            GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
+            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }}
+          no-fail-on-empty-changeset: "1"
+          capabilities: "CAPABILITY_NAMED_IAM"
+
+      #  Register this CloudFront domain on the shared
+      #    Cognito User Pool Client so the callback works.
+      #    For main: the client was just created — add localhost + main domain.
+      #    For branches: the client already exists — append the branch domain.
+      - name: Register callback URL on shared Cognito User Pool Client
+        run: |
+          # Read shared Cognito values from SSM (written by the main branch Cognito stack)
+          USER_POOL_ID=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/cognito/UserPoolId" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "")
+          APP_CLIENT_ID=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/cognito/AppClientId" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "")
+
+          if [ -z "$USER_POOL_ID" ] || [ -z "$APP_CLIENT_ID" ]; then
+            echo "Shared Cognito User Pool not found in SSM — skipping callback registration."
+            echo "This is expected on the very first main-branch deploy before Cognito exists."
+            exit 0
+          fi
+
+          NEW_CALLBACK="https://${{ env.CF_DOMAIN }}/callback"
+          NEW_LOGOUT="https://${{ env.CF_DOMAIN }}/"
+
+          # Get current callback URLs on the client
+          CURRENT=$(aws cognito-idp describe-user-pool-client \
+            --user-pool-id "$USER_POOL_ID" \
+            --client-id "$APP_CLIENT_ID" \
+            --query "UserPoolClient" --output json)
+
+          CURRENT_CALLBACKS=$(echo "$CURRENT" | jq -r '[.CallbackURLs[]] | @json')
+          CURRENT_LOGOUTS=$(echo "$CURRENT" | jq -r '[.LogoutURLs[]] | @json')
+
+          # Add new URLs if not already present
+          NEW_CALLBACKS=$(echo "$CURRENT_CALLBACKS" | jq --arg url "$NEW_CALLBACK" \
+            'if contains([$url]) then . else . + [$url] end')
+          NEW_LOGOUTS=$(echo "$CURRENT_LOGOUTS" | jq --arg url "$NEW_LOGOUT" \
+            'if contains([$url]) then . else . + [$url] end')
+
+          # Also ensure localhost is registered (for local dev)
+          NEW_CALLBACKS=$(echo "$NEW_CALLBACKS" | jq \
+            'if contains(["http://localhost:5173/callback"]) then . else . + ["http://localhost:5173/callback"] end')
+          NEW_LOGOUTS=$(echo "$NEW_LOGOUTS" | jq \
+            'if contains(["http://localhost:5173/"]) then . else . + ["http://localhost:5173/"] end')
+
+          aws cognito-idp update-user-pool-client \
+            --user-pool-id "$USER_POOL_ID" \
+            --client-id "$APP_CLIENT_ID" \
+            --allowed-o-auth-flows code \
+            --allowed-o-auth-flows-user-pool-client \
+            --allowed-o-auth-scopes openid email profile \
+            --supported-identity-providers Google \
+            --explicit-auth-flows ALLOW_REFRESH_TOKEN_AUTH \
+            --callback-urls "$NEW_CALLBACKS" \
+            --logout-urls "$NEW_LOGOUTS"
+
+          echo "Registered $NEW_CALLBACK on User Pool Client $APP_CLIENT_ID"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -277,12 +459,32 @@ jobs:
           DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" --output text)
           aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"
 
-      - name: Get CloudFront URL
+      - name: Print deployment summary
         run: |
-          CF_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" --output text)
-          echo "Branch: ${{ env.BRANCH_NAME }} deployed as environment: ${{ env.ENVIRONMENT }}"
-          echo "Your website is available at: https://$CF_URL"
-          echo "Team members API: $API_URL"
+          USER_POOL_ID=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/cognito/UserPoolId" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "")
+          COGNITO_DOMAIN=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/cognito/HostedUIDomain" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "")
+          IDP_RESPONSE_URL=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/cognito/IdpResponseUrl" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "")
+
+          echo "========================================"
+          echo "Branch:      ${{ env.BRANCH_NAME }}"
+          echo "Environment: ${{ env.ENVIRONMENT }}"
+          echo "App URL:     https://${{ env.CF_DOMAIN }}"
+          echo "API URL:     $API_URL"
+          if [ -n "$COGNITO_DOMAIN" ]; then
+            echo "Cognito UI:  $COGNITO_DOMAIN"
+          fi
+          if [ "${{ env.IS_MAIN_BRANCH }}" = "true" ] && [ -n "$IDP_RESPONSE_URL" ]; then
+            echo "----------------------------------------"
+            echo "ACTION REQUIRED (one-time) — add this URI to the Google OAuth client:"
+            echo "  $IDP_RESPONSE_URL"
+          fi
+          echo "========================================"
 
   deploy-production:
     if: github.event.inputs.action == 'deploy-production' || (github.ref == 'refs/heads/production' && github.event_name == 'push')
