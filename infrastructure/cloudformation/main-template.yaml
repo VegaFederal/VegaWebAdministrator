@@ -203,10 +203,6 @@ Outputs:
     Description: Team Members API endpoint URL
     Value: !GetAtt ApiLambdaStack.Outputs.ApiEndpoint
 
-  GoogleOAuthSecretArn:
-    Description: ARN of the Google OAuth secret (populate client_id/secret manually in the console)
-    Value: !GetAtt SecretsStack.Outputs.GoogleOAuthSecretArn
-
   OriginVerifySecretArn:
     Description: ARN of the auto-generated origin-verify secret
     Value: !GetAtt SecretsStack.Outputs.OriginVerifySecretArn
