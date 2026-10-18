@@ -441,6 +441,107 @@ jobs:
 
           echo "Registered $NEW_CALLBACK on User Pool Client $APP_CLIENT_ID"
 
+      # ── Auth-edge (Lambda@Edge): package with Cognito config baked in,
+      #    deploy the function/version, then re-run main-template to attach it
+      #    to CloudFront as a viewer-request trigger (Option B — wired end to end).
+      #    Every branch gets its own auth-edge function because CALLBACK_URL is
+      #    this branch's CloudFront domain, but all share the main Cognito pool.
+      - name: Package and deploy auth-edge Lambda@Edge
+        run: |
+          # Cognito config comes from the shared SSM parameters (written by main's Cognito stack).
+          USER_POOL_ID=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/cognito/UserPoolId" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "")
+          APP_CLIENT_ID=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/cognito/AppClientId" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "")
+          COGNITO_DOMAIN=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/cognito/HostedUIDomain" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "")
+
+          if [ -z "$USER_POOL_ID" ] || [ -z "$APP_CLIENT_ID" ] || [ -z "$COGNITO_DOMAIN" ]; then
+            echo "Shared Cognito config not found in SSM yet — skipping auth-edge wiring."
+            echo "This is expected on the very first main deploy before Cognito exists."
+            echo "AUTH_EDGE_READY=false" >> $GITHUB_ENV
+            exit 0
+          fi
+
+          # Package the function with config substituted in; captures AUTH_EDGE_S3_KEY.
+          OUTPUT=$(USER_POOL_ID="$USER_POOL_ID" \
+            APP_CLIENT_ID="$APP_CLIENT_ID" \
+            COGNITO_DOMAIN="$COGNITO_DOMAIN" \
+            CALLBACK_URL="${{ env.CALLBACK_URL }}" \
+            AWS_REGION="${{ secrets.AWS_REGION || 'us-east-1' }}" \
+            DEPLOYMENT_BUCKET="${{ env.TEMPLATE_BUCKET }}" \
+            ENVIRONMENT="${{ env.ENVIRONMENT }}" \
+            bash scripts/package-auth-edge.sh)
+          echo "$OUTPUT"
+          AUTH_EDGE_S3_KEY=$(echo "$OUTPUT" | grep '^AUTH_EDGE_S3_KEY=' | cut -d= -f2-)
+          echo "AUTH_EDGE_S3_KEY=$AUTH_EDGE_S3_KEY" >> $GITHUB_ENV
+          echo "AUTH_EDGE_READY=true" >> $GITHUB_ENV
+
+      # Deploy the auth-edge stack (creates/updates the function + a new version)
+      # by re-running main-template with the S3 key set. CloudFront is NOT yet
+      # pointed at it on this pass because AuthEdgeVersionArn is still empty.
+      - name: Deploy CloudFormation — create auth-edge function
+        if: env.AUTH_EDGE_READY == 'true'
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: ${{ env.STACK_NAME }}
+          template: infrastructure/cloudformation/main-template.yaml
+          parameter-overrides: >-
+            Environment=${{ env.ENVIRONMENT }},
+            VpcId=${{ env.VPC_ID }},
+            SubnetIds=${{ env.SUBNET_IDS }},
+            TemplateBucket=${{ env.TEMPLATE_BUCKET }},
+            DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
+            TableName=${{ env.DB_TABLE_NAME }},
+            TableArn=${{ env.DB_TABLE_ARN }},
+            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
+            CallbackUrl=${{ env.CALLBACK_URL }},
+            LogoutUrl=${{ env.LOGOUT_URL }},
+            AllowedGroupEmail=,
+            GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
+            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
+            AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }}
+          no-fail-on-empty-changeset: "1"
+          capabilities: "CAPABILITY_NAMED_IAM"
+
+      # Read the published version ARN, then re-run once more to attach it to CloudFront.
+      - name: Resolve auth-edge version ARN and attach to CloudFront
+        if: env.AUTH_EDGE_READY == 'true'
+        run: |
+          AUTH_EDGE_VERSION_ARN=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='AuthEdgeVersionArn'].OutputValue" \
+            --output text)
+          echo "AUTH_EDGE_VERSION_ARN=$AUTH_EDGE_VERSION_ARN" >> $GITHUB_ENV
+
+      - name: Deploy CloudFormation — attach auth-edge to CloudFront
+        if: env.AUTH_EDGE_READY == 'true'
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: ${{ env.STACK_NAME }}
+          template: infrastructure/cloudformation/main-template.yaml
+          parameter-overrides: >-
+            Environment=${{ env.ENVIRONMENT }},
+            VpcId=${{ env.VPC_ID }},
+            SubnetIds=${{ env.SUBNET_IDS }},
+            TemplateBucket=${{ env.TEMPLATE_BUCKET }},
+            DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
+            TableName=${{ env.DB_TABLE_NAME }},
+            TableArn=${{ env.DB_TABLE_ARN }},
+            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
+            CallbackUrl=${{ env.CALLBACK_URL }},
+            LogoutUrl=${{ env.LOGOUT_URL }},
+            AllowedGroupEmail=,
+            GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
+            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
+            AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }},
+            AuthEdgeVersionArn=${{ env.AUTH_EDGE_VERSION_ARN }}
+          no-fail-on-empty-changeset: "1"
+          capabilities: "CAPABILITY_NAMED_IAM"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:

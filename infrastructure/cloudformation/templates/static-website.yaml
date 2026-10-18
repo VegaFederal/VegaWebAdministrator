@@ -28,11 +28,20 @@ Parameters:
     AllowedValues: ["true", "false"]
     Description: Create Route 53 hosted zone for domain
 
+  AuthEdgeVersionArn:
+    Type: String
+    Default: ""
+    Description: >
+      Qualified version ARN of the auth-edge Lambda@Edge function. When set, it is
+      attached to the default cache behavior as a viewer-request trigger. Empty on
+      the first pass (before the function exists) so CloudFront can be created first.
+
 Conditions:
   HasCustomDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
   HasWwwDomain: !Not [!Equals [!Ref WwwDomain, ""]]
   ShouldCreateHostedZone: !And [!Condition HasCustomDomain, !Equals [!Ref CreateHostedZone, "true"]]
+  HasAuthEdge: !Not [!Equals [!Ref AuthEdgeVersionArn, ""]]
 
 Resources:
   # S3 Bucket for CloudFront logs
@@ -108,10 +117,18 @@ Resources:
             - OPTIONS
           TargetOriginId: S3Origin
           ForwardedValues:
-            QueryString: false
+            # Query string is needed so the /callback code+state reach the Lambda,
+            # and cookies are needed so the auth guard can read the session token.
+            QueryString: true
             Cookies:
-              Forward: none
+              Forward: all
           ViewerProtocolPolicy: redirect-to-https
+          LambdaFunctionAssociations: !If
+            - HasAuthEdge
+            - - EventType: viewer-request
+                LambdaFunctionARN: !Ref AuthEdgeVersionArn
+                IncludeBody: false
+            - !Ref AWS::NoValue
         PriceClass: PriceClass_100
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
