@@ -297,6 +297,16 @@ jobs:
           zip index.zip index.py
           aws s3 cp index.zip s3://$TEMPLATE_BUCKET/$ENVIRONMENT/lambda/team-members/index.zip
 
+      - name: Package group-check Lambda
+        run: |
+          cd src/lambda/group-check
+          pip install -r requirements.txt --target ./package --quiet
+          cp index.py ./package/
+          cd package && zip -r ../index.zip . -q
+          cd ..
+          aws s3 cp index.zip s3://$TEMPLATE_BUCKET/$ENVIRONMENT/lambda/group-check/index.zip
+          rm -rf package index.zip
+
       #  Determine if this is the main branch 
       - name: Set branch type
         run: |
@@ -368,6 +378,7 @@ jobs:
             AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
             CallbackUrl=${{ env.CALLBACK_URL }},
             LogoutUrl=${{ env.LOGOUT_URL }},
+            AllowedGroupEmail=,
             GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
             GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }}
           no-fail-on-empty-changeset: "1"
@@ -588,6 +599,16 @@ jobs:
           cd src/lambda/team-members
           zip index.zip index.py
           aws s3 cp index.zip s3://$TEMPLATE_BUCKET/$ENVIRONMENT/lambda/team-members/index.zip
+
+      - name: Package group-check Lambda
+        run: |
+          cd src/lambda/group-check
+          pip install -r requirements.txt --target ./package --quiet
+          cp index.py ./package/
+          cd package && zip -r ../index.zip . -q
+          cd ..
+          aws s3 cp index.zip s3://$TEMPLATE_BUCKET/$ENVIRONMENT/lambda/group-check/index.zip
+          rm -rf package index.zip
 
       - name: Deploy CloudFormation stack
         uses: aws-actions/aws-cloudformation-github-deploy@v1
