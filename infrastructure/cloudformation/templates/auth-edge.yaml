@@ -1,8 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Lambda@Edge viewer-request auth guard for CloudFront. Validates the Cognito
+  Viewer request auth guard for CloudFront. Validates the Cognito
   session cookie and redirects unauthenticated requests to the Cognito Hosted UI.
-  Must be deployed in us-east-1 (Lambda@Edge requirement).
 
 Parameters:
   Environment:
@@ -17,13 +16,11 @@ Parameters:
   AuthEdgeS3Key:
     Type: String
     Description: >
-      S3 key of the packaged auth-edge ZIP. Includes a content hash so that a new
-      object key (and therefore a new Lambda version) is produced whenever the
-      baked-in config or code changes.
+      S3 key of the packaged ZIP. Includes a content hash so that a new
+      object key is produced whenever the config or code changes.
 
 Resources:
   # IAM role trusted by BOTH lambda and edgelambda service principals —
-  # required for Lambda@Edge replication.
   AuthEdgeFunctionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -58,8 +55,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # Explicit, published version — CloudFront can only associate a specific
-  # version ARN (not $LATEST). A new ZIP key yields a new version each deploy.
+  # CloudFront can only associate a specific version ARN.
   AuthEdgeFunctionVersion:
     Type: AWS::Lambda::Version
     Properties:

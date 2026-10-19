@@ -15,7 +15,7 @@
  *              Cognito Hosted UI (Google login) with the original URI in `state`.
  */
 
-// ── CONFIG — replaced by sed during CI packaging (do not edit the tokens) ──
+// CONFIG - replaced by sed during CI packaging (do not edit the tokens) ──
 const USER_POOL_ID = '@@USER_POOL_ID@@';
 const APP_CLIENT_ID = '@@APP_CLIENT_ID@@';
 const COGNITO_DOMAIN = '@@COGNITO_DOMAIN@@'; // e.g. https://pool.auth.us-east-1.amazoncognito.com
@@ -33,7 +33,7 @@ exports.handler = async (event) => {
   const uri = request.uri;
   const cookies = parseCookies(request.headers);
 
-  // ── /callback ────────────────────────────────────────────────────────────
+  // callback 
   if (uri === '/callback') {
     const params = parseQueryString(request.querystring || '');
     const code = params.code;
@@ -45,18 +45,18 @@ exports.handler = async (event) => {
 
     try {
       const tokens = await exchangeCodeForTokens(code);
-      // Use the id_token as the session cookie (it carries email + aud we validate).
+      // Use the id_token as the session cookie.
       return redirectResponse(state || '/', [
         `${COOKIE_NAME}=${tokens.id_token}; HttpOnly; Secure; SameSite=Lax; Path=/`,
       ]);
     } catch (err) {
       console.error('Token exchange failed:', err && err.message ? err.message : err);
-      // Exchange failed — bounce back to login rather than exposing an error.
+      // Exchange failed — Don't display error, send user back to login.
       return redirectToCognito('/');
     }
   }
 
-  // ── all other paths ────────────────────────────────────────────────────────
+  // non-login path
   const token = cookies[COOKIE_NAME];
 
   if (!token) {
@@ -72,7 +72,7 @@ exports.handler = async (event) => {
   return request;
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+//  Helper Function
 
 /** Parse the Cookie header(s) into a { name: value } map. */
 function parseCookies(headers) {
@@ -91,7 +91,7 @@ function parseCookies(headers) {
   return out;
 }
 
-/** Parse a query string "a=1&b=2" into a { a: "1", b: "2" } map (values stay encoded). */
+/** Parse a query string "a=1&b=2" into a { a: "1", b: "2" } . */
 function parseQueryString(qs) {
   const out = {};
   if (!qs) return out;
@@ -118,8 +118,7 @@ async function getJwks() {
 }
 
 /**
- * Validate the JWT: RS256 signature against the matching JWKS key,
- * exp not passed, aud matches APP_CLIENT_ID, token_use is "id".
+ * Validate the JWT: signature against the matching JWKS key,
  * Returns true/false; never throws.
  */
 async function validateJwt(token) {

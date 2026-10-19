@@ -98,15 +98,14 @@ Parameters:
     Type: String
     Default: ""
     Description: >
-      S3 key of the packaged auth-edge ZIP. Empty on the first pass (before Cognito
-      config is known); set on the second pass so the auth-edge stack is created.
+      S3 key of the packaged auth-edge ZIP.
 
   AuthEdgeVersionArn:
     Type: String
     Default: ""
     Description: >
       Version ARN of the auth-edge function, fed back into CloudFront to attach the
-      viewer-request trigger. Empty until the auth-edge stack has been deployed.
+      viewer-request trigger. 
 
 Conditions:
   HasVpcConfig: !Not [!Equals [!Ref VpcId, '']]
@@ -116,7 +115,6 @@ Conditions:
   DeployCognito: !And
     - !Condition HasCognitoConfig
     - !Condition IsMainBranch
-  # Auth-edge is deployed per-branch once its packaged ZIP key is known.
   DeployAuthEdge: !Not [!Equals [!Ref AuthEdgeS3Key, '']]
 
 Resources:
@@ -159,9 +157,6 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # Auth-edge (Lambda@Edge) Stack — deployed per-branch once the packaged ZIP
-  # (with Cognito config baked in) is available. Produces the version ARN that
-  # CloudFront attaches as a viewer-request trigger.
   AuthEdgeStack:
     Type: AWS::CloudFormation::Stack
     Condition: DeployAuthEdge
@@ -213,8 +208,6 @@ Resources:
           Value: !Ref Environment
 
 Outputs:
-  # Your outputs will go here
-
   WebServerSecurityGroupId:
     Condition: HasVpcConfig
     Description: Security Group ID for web servers

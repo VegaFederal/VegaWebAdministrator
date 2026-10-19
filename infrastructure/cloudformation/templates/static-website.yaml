@@ -32,9 +32,8 @@ Parameters:
     Type: String
     Default: ""
     Description: >
-      Qualified version ARN of the auth-edge Lambda@Edge function. When set, it is
-      attached to the default cache behavior as a viewer-request trigger. Empty on
-      the first pass (before the function exists) so CloudFront can be created first.
+      Qualified version ARN of the auth edge function. When set, it is
+      attached to the default cache behavior as a viewer-request trigger.
 
 Conditions:
   HasCustomDomain: !Not [!Equals [!Ref DomainName, ""]]

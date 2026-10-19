@@ -28,13 +28,13 @@ Parameters:
     Type: String
     Description: Post-logout redirect URL (same base domain as CallbackUrl, path /)
 
-  # Empty in dev (pass-through). Set to a Google Group email in prod to restrict access.
+  # Empty in dev. Set to a Google Group email in prods.
   AllowedGroupEmail:
     Type: String
     Default: ""
     Description: >
       Google Group email whose members are allowed (e.g. admin-team@vegafederal.com).
-      Empty = pass-through mode (dev). Set in production-config.json for prod.
+      Set in production-config.json for prod.
 
   GoogleServiceAccountSecretArn:
     Type: String
@@ -70,16 +70,15 @@ Resources:
                   - secretsmanager:GetSecretValue
                 Resource: !Ref GoogleServiceAccountSecretArn
 
-  # Group-check Lambda function 
-  # In dev (ALLOWED_GROUP_EMAIL empty) this is a pass-through.
-  # In prod it calls the Google Directory API to verify group membership.
+  # In dev (ALLOWED_GROUP_EMAIL empty) In prod it calls the Google 
+  # Directory API to verify group membership.
   GroupCheckFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Sub "VegaWebAdmin-GroupCheck-${Environment}"
       Description: >
         Cognito pre-token-generation trigger. Dev = pass-through.
-        Prod = verifies user is a member of ALLOWED_GROUP_EMAIL via Directory API.
+        Prod = verifies user is a member of ALLOWED_GROUP_EMAIL.
       Runtime: python3.12
       Role: !GetAtt GroupCheckLambdaRole.Arn
       Handler: index.handler
@@ -138,10 +137,6 @@ Resources:
         client_id: !Ref GoogleOAuthClientId
         client_secret: !Ref GoogleOAuthClientSecret
         authorize_scopes: "openid email profile"
-        # Note: domain restriction is NOT done here — Cognito rejects unknown keys.
-        # Restriction is enforced at two levels instead:
-        # 1. Google OAuth consent screen is set to Internal (Workspace-only)
-        # 2. Pre-token-generation Lambda (S3) verifies @vegafederal.com on the email claim
       AttributeMapping:
         email: email
         given_name: given_name
@@ -174,17 +169,13 @@ Resources:
         - ALLOW_REFRESH_TOKEN_AUTH
 
   # Cognito-managed hosted UI subdomain
-  # Domain prefix must be globally unique; combining environment + account ID
-  # guarantees uniqueness across deployments.
+  # Domain prefix must be globally unique.
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
       Domain: !Sub "vegawebadmin-${Environment}-${AWS::AccountId}"
       UserPoolId: !Ref UserPool
 
-  #  SSM Parameters — written here so branch stacks can read them 
-  # Branch deployments never create their own Cognito stack. Instead they read
-  # these SSM parameters to discover the shared main-branch User Pool.
   SsmUserPoolId:
     Type: AWS::SSM::Parameter
     Properties:

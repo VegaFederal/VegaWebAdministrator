@@ -2,9 +2,9 @@
 #
 # package-auth-edge.sh
 #
-# Bakes Cognito config into the auth-edge Lambda@Edge source (Lambda@Edge has no
-# runtime env vars), zips it, and uploads to the deployment bucket under a
-# content-hashed key so each config/code change produces a new Lambda version.
+# Bakes Cognito config into the auth edge source, zips it, and uploads to the 
+# deployment bucket under a content-hashed key so each config/code change produces 
+# a new Lambda version.
 #
 # Required env vars:
 #   USER_POOL_ID        Cognito User Pool ID            (from SSM)
@@ -14,8 +14,7 @@
 #   AWS_REGION          Region of the Cognito pool (us-east-1)
 #   DEPLOYMENT_BUCKET   S3 bucket for the ZIP
 #   ENVIRONMENT         Branch/environment slug
-#
-# Echoes the resulting S3 key as:  AUTH_EDGE_S3_KEY=<key>
+
 set -euo pipefail
 
 : "${USER_POOL_ID:?}"

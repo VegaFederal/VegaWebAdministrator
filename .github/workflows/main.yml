@@ -441,11 +441,9 @@ jobs:
 
           echo "Registered $NEW_CALLBACK on User Pool Client $APP_CLIENT_ID"
 
-      # ── Auth-edge (Lambda@Edge): package with Cognito config baked in,
+      #  Edge Lambda: package with Cognito config baked in,
       #    deploy the function/version, then re-run main-template to attach it
-      #    to CloudFront as a viewer-request trigger (Option B — wired end to end).
-      #    Every branch gets its own auth-edge function because CALLBACK_URL is
-      #    this branch's CloudFront domain, but all share the main Cognito pool.
+      #    to CloudFront as a viewer-request trigger 
       - name: Package and deploy auth-edge Lambda@Edge
         run: |
           # Cognito config comes from the shared SSM parameters (written by main's Cognito stack).
@@ -480,9 +478,8 @@ jobs:
           echo "AUTH_EDGE_S3_KEY=$AUTH_EDGE_S3_KEY" >> $GITHUB_ENV
           echo "AUTH_EDGE_READY=true" >> $GITHUB_ENV
 
-      # Deploy the auth-edge stack (creates/updates the function + a new version)
-      # by re-running main-template with the S3 key set. CloudFront is NOT yet
-      # pointed at it on this pass because AuthEdgeVersionArn is still empty.
+      # Deploy the auth-edge stack 
+      # by re-running main-template with the S3 key set. 
       - name: Deploy CloudFormation — create auth-edge function
         if: env.AUTH_EDGE_READY == 'true'
         uses: aws-actions/aws-cloudformation-github-deploy@v1
