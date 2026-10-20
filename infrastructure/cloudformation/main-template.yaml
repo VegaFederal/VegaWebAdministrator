@@ -93,6 +93,20 @@ Parameters:
     Default: ""
     Description: Post-logout redirect URL (same base domain as CallbackUrl, path /)
 
+  # Auth-edge (Lambda@Edge) — packaged in CI with Cognito config baked in.
+  AuthEdgeS3Key:
+    Type: String
+    Default: ""
+    Description: >
+      S3 key of the packaged auth-edge ZIP.
+
+  AuthEdgeVersionArn:
+    Type: String
+    Default: ""
+    Description: >
+      Version ARN of the auth-edge function, fed back into CloudFront to attach the
+      viewer-request trigger. 
+
 Conditions:
   HasVpcConfig: !Not [!Equals [!Ref VpcId, '']]
   # Cognito is only deployed on the main branch — all other branches share it
@@ -101,6 +115,7 @@ Conditions:
   DeployCognito: !And
     - !Condition HasCognitoConfig
     - !Condition IsMainBranch
+  DeployAuthEdge: !Not [!Equals [!Ref AuthEdgeS3Key, '']]
 
 Resources:
   # Secrets stack for Google SSO.
@@ -142,6 +157,19 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
+  AuthEdgeStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: DeployAuthEdge
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/auth-edge.yaml
+      Parameters:
+        Environment: !Ref Environment
+        DeploymentBucket: !Ref DeploymentBucket
+        AuthEdgeS3Key: !Ref AuthEdgeS3Key
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
   # S3 and CloudFront Stack
   StaticWebsiteStack:
     Type: AWS::CloudFormation::Stack
@@ -153,6 +181,7 @@ Resources:
         WwwDomain: !Ref WwwDomain
         CertificateArn: !Ref CertificateArn
         CreateHostedZone: !Ref CreateHostedZone
+        AuthEdgeVersionArn: !Ref AuthEdgeVersionArn
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -179,8 +208,6 @@ Resources:
           Value: !Ref Environment
 
 Outputs:
-  # Your outputs will go here
-
   WebServerSecurityGroupId:
     Condition: HasVpcConfig
     Description: Security Group ID for web servers
@@ -239,3 +266,8 @@ Outputs:
     Condition: DeployCognito
     Description: Redirect URI to add to the Google OAuth client after first deploy
     Value: !GetAtt CognitoStack.Outputs.IdpResponseUrl
+
+  AuthEdgeVersionArn:
+    Condition: DeployAuthEdge
+    Description: Version ARN of the auth-edge Lambda@Edge function
+    Value: !GetAtt AuthEdgeStack.Outputs.AuthEdgeVersionArn

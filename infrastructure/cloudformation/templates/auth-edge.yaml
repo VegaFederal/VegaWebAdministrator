@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Viewer request auth guard for CloudFront. Validates the Cognito
+  session cookie and redirects unauthenticated requests to the Cognito Hosted UI.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: The deployment environment
+
+  DeploymentBucket:
+    Type: String
+    Description: S3 bucket containing the packaged auth-edge Lambda ZIP
+
+  AuthEdgeS3Key:
+    Type: String
+    Description: >
+      S3 key of the packaged ZIP. Includes a content hash so that a new
+      object key is produced whenever the config or code changes.
+
+Resources:
+  # IAM role trusted by BOTH lambda and edgelambda service principals —
+  AuthEdgeFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "VegaWebAdmin-authedge-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - edgelambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  AuthEdgeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "VegaWebAdmin-authedge-${Environment}"
+      Description: CloudFront viewer-request Cognito auth guard
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt AuthEdgeFunctionRole.Arn
+      # Lambda@Edge viewer-request limits: max 5s timeout, no env vars allowed.
+      Timeout: 5
+      MemorySize: 128
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: !Ref AuthEdgeS3Key
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CloudFront can only associate a specific version ARN.
+  AuthEdgeFunctionVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref AuthEdgeFunction
+      Description: !Sub "auth-edge ${Environment} ${AuthEdgeS3Key}"
+
+Outputs:
+  AuthEdgeFunctionArn:
+    Description: Unqualified ARN of the auth-edge function
+    Value: !GetAtt AuthEdgeFunction.Arn
+
+  AuthEdgeVersionArn:
+    Description: Qualified version ARN for CloudFront LambdaFunctionAssociations
+    Value: !Ref AuthEdgeFunctionVersion
