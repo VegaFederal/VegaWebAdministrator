@@ -3,8 +3,13 @@ import boto3
 import os
 import base64
 import uuid
+import logging
 from decimal import Decimal
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S')
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['TABLE_NAME'])
 s3 = boto3.client('s3')
@@ -109,7 +114,6 @@ def handler(event, context):
             "body": json.dumps({"error": str(e)})
         }
 
-
 def get_team_members():
     response = table.scan()
     members = sorted(response['Items'], key=lambda x: x.get('memberOrder', 0))
@@ -118,7 +122,7 @@ def get_team_members():
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
         "body": json.dumps([team_member_for_response(member) for member in members])
     }
-
+logging.info("get team members return status code 200")
 
 def delete_team_member(event):
     path_params = event.get('pathParameters') or {}
@@ -129,7 +133,7 @@ def delete_team_member(event):
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
             "body": json.dumps({"error": "ID is required"})
         }
-
+logging.info ("delete team member, return status code 400")
     item = table.get_item(Key={'id': member_id}).get('Item')
     if not item:
         return {
