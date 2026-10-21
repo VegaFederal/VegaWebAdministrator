@@ -117,23 +117,25 @@ def handler(event, context):
 def get_team_members():
     response = table.scan()
     members = sorted(response['Items'], key=lambda x: x.get('memberOrder', 0))
+    logging.info("get team members return status code 200")
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
         "body": json.dumps([team_member_for_response(member) for member in members])
     }
-logging.info("get team members return status code 200")
+
 
 def delete_team_member(event):
     path_params = event.get('pathParameters') or {}
     member_id = path_params.get('id')
     if not member_id:
+        logging.info ("delete team member, return status code 400")
         return {
             "statusCode": 400,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
             "body": json.dumps({"error": "ID is required"})
         }
-logging.info ("delete team member, return status code 400")
+  
     item = table.get_item(Key={'id': member_id}).get('Item')
     if not item:
         return {
