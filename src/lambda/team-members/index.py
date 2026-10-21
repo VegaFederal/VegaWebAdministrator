@@ -147,7 +147,7 @@ def get_team_members():
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
         "body": json.dumps([team_member_for_response(member) for member in members])
     }
-logging.info("get team members return status code 200")
+
 
 def delete_team_member(event):
     path_params = event.get('pathParameters') or {}
