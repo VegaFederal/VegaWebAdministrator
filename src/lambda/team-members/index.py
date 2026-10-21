@@ -6,10 +6,7 @@ import uuid
 import logging
 from decimal import Decimal
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig (level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['TABLE_NAME'])
 s3 = boto3.client('s3')
@@ -109,6 +106,7 @@ def handler(event, context):
                 "body": json.dumps({"error": "Method not allowed"})
             }
     except Exception as e:
+        logging.error(f"Error processing request: {e}", exc_info=True)
         return {
             "statusCode": 500,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
@@ -163,6 +161,7 @@ def update_team_member(event):
     path_params = event.get('pathParameters') or {}
     member_id = path_params.get('id')
     if not member_id:
+        logging.info("update team member, return status code 400")
         return {
             "statusCode": 400,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
@@ -188,6 +187,7 @@ def update_team_member(event):
         try:
             new_image_key, new_image_url = upload_image_data_url(body['image'])
         except ValueError as exc:
+            logging.error(f"Failed to upload new image: {exc}", exc_info=True)
             return {
                 "statusCode": 400,
                 "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
@@ -218,7 +218,7 @@ def update_team_member(event):
             try:
                 s3.delete_object(Bucket=BUCKET_NAME, Key=new_image_key)
             except Exception as exc:
-                print(f"Failed to clean up new image {new_image_key}: {exc}")
+                logging.error(f"Failed to clean up new image {new_image_key}: {exc}", exc_info=True)
         raise
 
     if new_image_key:
@@ -228,7 +228,7 @@ def update_team_member(event):
                 try:
                     s3.delete_object(Bucket=BUCKET_NAME, Key=old_image_key)
                 except Exception as exc:
-                    print(f"Failed to delete old image {old_image_key}: {exc}")
+                    logging.error(f"Failed to delete old image {old_image_key}: {exc}", exc_info=True)
 
     return {
         "statusCode": 200,
@@ -284,7 +284,7 @@ def update_card_order(event):
                 ':order': card_order['memberOrder']
             }
         )
-
+    logging.info("update card order, return status code 200")
     return {
         "statusCode": 200,
         "headers": {
