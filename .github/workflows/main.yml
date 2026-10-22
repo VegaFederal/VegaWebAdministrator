@@ -6,6 +6,8 @@ on:
   pull_request:
     types: [closed]
     branches: [ main ]
+  schedule:
+    - cron: '0 8 * * *'
   workflow_dispatch:
     inputs:
       action:
@@ -17,6 +19,7 @@ on:
           - deploy
           - deploy-production
           - cleanup
+          - sweep-auth-edge
       branch:
         description: 'Branch to cleanup (for cleanup action only)'
         required: false
@@ -25,6 +28,7 @@ on:
 
 jobs:
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -102,10 +106,10 @@ jobs:
             aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }} || true
             
             # Check for any remaining nested stacks and force delete them
-            NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ApiLambdaStack" "${{ env.STACK_NAME }}-ContactPageStack" "${{ env.STACK_NAME }}-StaticWebsiteStack")
+            NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ApiLambdaStack" "${{ env.STACK_NAME }}-ContactPageStack" "${{ env.STACK_NAME }}-StaticWebsiteStack" "${{ env.STACK_NAME }}-AuthEdgeStack" "${{ env.STACK_NAME }}-CognitoStack")
             
             for prefix in "${NESTED_STACK_PREFIXES[@]}"; do
-              for stack in $(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --query "StackSummaries[?starts_with(StackName, '$prefix')].StackName" --output text 2>/dev/null || echo ""); do
+              for stack in $(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE DELETE_FAILED --query "StackSummaries[?starts_with(StackName, '$prefix')].StackName" --output text 2>/dev/null || echo ""); do
                 if [ ! -z "$stack" ] && aws cloudformation describe-stacks --stack-name "$stack" 2>/dev/null; then
                   echo "Force deleting nested stack: $stack"
                   aws cloudformation delete-stack --stack-name "$stack"
@@ -829,10 +833,10 @@ jobs:
             echo "Waiting for stack deletion..."
             aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }} || true
             
-            NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ApiLambdaStack" "${{ env.STACK_NAME }}-ContactPageStack" "${{ env.STACK_NAME }}-StaticWebsiteStack")
+            NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ApiLambdaStack" "${{ env.STACK_NAME }}-ContactPageStack" "${{ env.STACK_NAME }}-StaticWebsiteStack" "${{ env.STACK_NAME }}-AuthEdgeStack" "${{ env.STACK_NAME }}-CognitoStack")
             
             for prefix in "${NESTED_STACK_PREFIXES[@]}"; do
-              for stack in $(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --query "StackSummaries[?starts_with(StackName, '$prefix')].StackName" --output text 2>/dev/null || echo ""); do
+              for stack in $(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE DELETE_FAILED --query "StackSummaries[?starts_with(StackName, '$prefix')].StackName" --output text 2>/dev/null || echo ""); do
                 if [ ! -z "$stack" ] && aws cloudformation describe-stacks --stack-name "$stack" 2>/dev/null; then
                   echo "Force deleting nested stack: $stack"
                   aws cloudformation delete-stack --stack-name "$stack"
@@ -847,3 +851,108 @@ jobs:
         run: |
           echo "Deleting template bucket: ${{ env.TEMPLATE_BUCKET }}"
           aws s3 rb s3://${{ env.TEMPLATE_BUCKET }} --force
+
+  sweep-auth-edge:
+    if: github.event_name == 'schedule' || github.event.inputs.action == 'sweep-auth-edge'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Read configuration
+        run: |
+          CONFIG_FILE="config/project-config.json"
+          PROJECT_NAME=$(jq -r '.projectName' $CONFIG_FILE)
+          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+
+      - name: Delete orphaned auth-edge functions
+        run: |
+          set -euo pipefail
+
+          PREFIX="VegaWebAdmin-authedge-"
+          MAIN_FUNCTION="${PREFIX}main"
+          ASSOCIATED_FILE=$(mktemp)
+          failed=0
+
+          # Version ARNs on a distribution look like
+          # arn:aws:lambda:us-east-1:ACCOUNT:function:NAME:VERSION
+          marker=""
+          while true; do
+            if [ -n "$marker" ]; then
+              page=$(aws cloudfront list-distributions --marker "$marker" --output json)
+            else
+              page=$(aws cloudfront list-distributions --output json)
+            fi
+            echo "$page" | jq -r '
+              [ .DistributionList.Items[]? |
+                .DefaultCacheBehavior.LambdaFunctionAssociations.Items[]?.LambdaFunctionARN,
+                (.CacheBehaviors.Items[]?.LambdaFunctionAssociations.Items[]?.LambdaFunctionARN)
+              ] | .[] | select(. != null)
+            ' >> "$ASSOCIATED_FILE"
+            truncated=$(echo "$page" | jq -r '.DistributionList.IsTruncated // false')
+            if [ "$truncated" != "true" ]; then
+              break
+            fi
+            marker=$(echo "$page" | jq -r '.DistributionList.NextMarker // empty')
+            if [ -z "$marker" ]; then
+              break
+            fi
+          done
+
+          function_text=$(aws lambda list-functions \
+            --query "Functions[?starts_with(FunctionName, '${PREFIX}')].FunctionName" \
+            --output text)
+          mapfile -t FUNCTIONS < <(printf '%s\n' "$function_text" | tr '\t' '\n' | sed '/^$/d')
+
+          if [ ${#FUNCTIONS[@]} -eq 0 ]; then
+            echo "No ${PREFIX}* functions found."
+            exit 0
+          fi
+
+          for fn in "${FUNCTIONS[@]}"; do
+            if [ "$fn" = "$MAIN_FUNCTION" ]; then
+              echo "Skipping ${fn}: main auth-edge function"
+              continue
+            fi
+
+            environment="${fn#${PREFIX}}"
+            stack_name="${PROJECT_NAME}-${environment}"
+            if aws cloudformation describe-stacks --stack-name "$stack_name" >/dev/null 2>&1; then
+              echo "Skipping ${fn}: branch stack ${stack_name} still exists"
+              continue
+            fi
+
+            if grep -E -q ":function:${fn}(:|$)" "$ASSOCIATED_FILE"; then
+              echo "Skipping ${fn}: still associated with a live distribution"
+              continue
+            fi
+
+            echo "Deleting orphaned function ${fn}"
+            set +e
+            delete_output=$(aws lambda delete-function --function-name "$fn" 2>&1)
+            delete_status=$?
+            set -e
+            if [ "$delete_status" -ne 0 ]; then
+              if echo "$delete_output" | grep -q "replicated function"; then
+                echo "Replicas still present for ${fn}; leaving it for the next run"
+                echo "$delete_output"
+                continue
+              fi
+              echo "Failed to delete ${fn}"
+              echo "$delete_output"
+              failed=1
+              continue
+            fi
+            echo "Deleted ${fn}"
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "One or more deletes failed for a reason other than edge replicas"
+            exit 1
+          fi

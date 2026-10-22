@@ -37,8 +37,11 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
+
   AuthEdgeFunction:
     Type: AWS::Lambda::Function
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       FunctionName: !Sub "VegaWebAdmin-authedge-${Environment}"
       Description: CloudFront viewer-request Cognito auth guard
@@ -58,6 +61,8 @@ Resources:
   # CloudFront can only associate a specific version ARN.
   AuthEdgeFunctionVersion:
     Type: AWS::Lambda::Version
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       FunctionName: !Ref AuthEdgeFunction
       Description: !Sub "auth-edge ${Environment} ${AuthEdgeS3Key}"
