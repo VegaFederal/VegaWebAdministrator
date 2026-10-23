@@ -24,6 +24,7 @@ def decimal_to_native(obj):
         return {k: decimal_to_native(v) for k, v in obj.items()}
     if isinstance(obj, Decimal):
         return int(obj) if obj % 1 == 0 else float(obj)
+    print ("decimal to native")
     return obj
 
 
