@@ -20,11 +20,12 @@ Parameters:
       object key is produced whenever the config or code changes.
 
 Resources:
-  # IAM role trusted by BOTH lambda and edgelambda service principals —
+  # IAM role trusted by BOTH lambda and edgelambda service principals.
   AuthEdgeFunctionRole:
     Type: AWS::IAM::Role
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
-      RoleName: !Sub "VegaWebAdmin-authedge-${Environment}"
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -37,10 +38,13 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
+  # Retain policies ensure CloudFormation never attempts to delete the function
+  # while its Lambda@Edge replicas still exist (AWS clears those out of band).
   AuthEdgeFunction:
     Type: AWS::Lambda::Function
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
-      FunctionName: !Sub "VegaWebAdmin-authedge-${Environment}"
       Description: CloudFront viewer-request Cognito auth guard
       Runtime: nodejs20.x
       Handler: index.handler
@@ -59,12 +63,11 @@ Resources:
   #
   # The logical ID carries the content hash (@@VERSION_HASH@@ is substituted in CI).
   # A new commit => new hash => a NEW logical ID, so CloudFormation CREATES a fresh
-  # version and leaves the previous one.
-  # DeletionPolicy: Retain ensures CloudFormation never attempts to delete the
-  # version.
+  # version and leaves the previous one in place (never deletes a replicated version).
   AuthEdgeFunctionVersion@@VERSION_HASH@@:
     Type: AWS::Lambda::Version
     DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       FunctionName: !Ref AuthEdgeFunction
       Description: !Sub "auth-edge ${Environment} ${AuthEdgeS3Key}"
