@@ -56,8 +56,15 @@ Resources:
           Value: !Ref Environment
 
   # CloudFront can only associate a specific version ARN.
-  AuthEdgeFunctionVersion:
+  #
+  # The logical ID carries the content hash (@@VERSION_HASH@@ is substituted in CI).
+  # A new commit => new hash => a NEW logical ID, so CloudFormation CREATES a fresh
+  # version and leaves the previous one.
+  # DeletionPolicy: Retain ensures CloudFormation never attempts to delete the
+  # version.
+  AuthEdgeFunctionVersion@@VERSION_HASH@@:
     Type: AWS::Lambda::Version
+    DeletionPolicy: Retain
     Properties:
       FunctionName: !Ref AuthEdgeFunction
       Description: !Sub "auth-edge ${Environment} ${AuthEdgeS3Key}"
@@ -69,4 +76,4 @@ Outputs:
 
   AuthEdgeVersionArn:
     Description: Qualified version ARN for CloudFront LambdaFunctionAssociations
-    Value: !Ref AuthEdgeFunctionVersion
+    Value: !Ref AuthEdgeFunctionVersion@@VERSION_HASH@@

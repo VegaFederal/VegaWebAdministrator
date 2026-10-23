@@ -471,6 +471,7 @@ jobs:
             CALLBACK_URL="${{ env.CALLBACK_URL }}" \
             AWS_REGION="${{ secrets.AWS_REGION || 'us-east-1' }}" \
             DEPLOYMENT_BUCKET="${{ env.TEMPLATE_BUCKET }}" \
+            TEMPLATE_BUCKET="${{ env.TEMPLATE_BUCKET }}" \
             ENVIRONMENT="${{ env.ENVIRONMENT }}" \
             bash scripts/package-auth-edge.sh)
           echo "$OUTPUT"
