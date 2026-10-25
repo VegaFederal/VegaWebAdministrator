@@ -16,10 +16,13 @@
  */
 
 // CONFIG - replaced by sed during CI packaging (do not edit the tokens) ──
+// These are all SHARED across every environment (one Cognito pool on main), so
+// they can be baked in. The callback URL is NOT baked in — it is derived per
+// request from the Host header, which lets a single shared function serve every
+// branch/prod distribution without redeployment.
 const USER_POOL_ID = '@@USER_POOL_ID@@';
 const APP_CLIENT_ID = '@@APP_CLIENT_ID@@';
 const COGNITO_DOMAIN = '@@COGNITO_DOMAIN@@'; // e.g. https://pool.auth.us-east-1.amazoncognito.com
-const CALLBACK_URL = '@@CALLBACK_URL@@';     // e.g. https://xxxx.cloudfront.net/callback
 const AWS_REGION = '@@AWS_REGION@@';
 
 const JWKS_URL = `https://cognito-idp.${AWS_REGION}.amazonaws.com/${USER_POOL_ID}/.well-known/jwks.json`;
@@ -33,6 +36,11 @@ exports.handler = async (event) => {
   const uri = request.uri;
   const cookies = parseCookies(request.headers);
 
+  // Derive the callback URL from the host the viewer actually hit. In a
+  // viewer-request trigger, request.headers.host carries the distribution
+  // (or custom) domain, so one shared function works for every environment.
+  const callbackUrl = deriveCallbackUrl(request);
+
   // callback 
   if (uri === '/callback') {
     const params = parseQueryString(request.querystring || '');
@@ -40,11 +48,11 @@ exports.handler = async (event) => {
     const state = params.state ? decodeURIComponent(params.state) : '/';
 
     if (!code) {
-      return redirectToCognito('/');
+      return redirectToCognito(callbackUrl, '/');
     }
 
     try {
-      const tokens = await exchangeCodeForTokens(code);
+      const tokens = await exchangeCodeForTokens(code, callbackUrl);
       // Use the id_token as the session cookie.
       return redirectResponse(state || '/', [
         `${COOKIE_NAME}=${tokens.id_token}; HttpOnly; Secure; SameSite=Lax; Path=/`,
@@ -52,7 +60,7 @@ exports.handler = async (event) => {
     } catch (err) {
       console.error('Token exchange failed:', err && err.message ? err.message : err);
       // Exchange failed — Don't display error, send user back to login.
-      return redirectToCognito('/');
+      return redirectToCognito(callbackUrl, '/');
     }
   }
 
@@ -60,17 +68,29 @@ exports.handler = async (event) => {
   const token = cookies[COOKIE_NAME];
 
   if (!token) {
-    return redirectToCognito(uri);
+    return redirectToCognito(callbackUrl, uri);
   }
 
   const valid = await validateJwt(token);
   if (!valid) {
-    return redirectToCognito(uri, [clearCookieHeader()]);
+    return redirectToCognito(callbackUrl, uri, [clearCookieHeader()]);
   }
 
   // Authenticated — let the request continue to the origin unchanged.
   return request;
 };
+
+/**
+ * Build the OAuth callback URL from the viewer Host header.
+ * Falls back safely if the header is somehow absent.
+ */
+function deriveCallbackUrl(request) {
+  const hostHeader =
+    request.headers && request.headers.host && request.headers.host[0]
+      ? request.headers.host[0].value
+      : '';
+  return `https://${hostHeader}/callback`;
+}
 
 //  Helper Function
 
@@ -164,12 +184,12 @@ async function validateJwt(token) {
 }
 
 /** POST the auth code to the Cognito token endpoint; returns the token JSON. */
-async function exchangeCodeForTokens(code) {
+async function exchangeCodeForTokens(code, callbackUrl) {
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: APP_CLIENT_ID,
     code: code,
-    redirect_uri: CALLBACK_URL,
+    redirect_uri: callbackUrl,
   });
 
   const res = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
@@ -186,12 +206,12 @@ async function exchangeCodeForTokens(code) {
 }
 
 /** Build a 302 to the Cognito Hosted UI (Google), encoding the original URI in state. */
-function redirectToCognito(originalUri, extraCookies = []) {
+function redirectToCognito(callbackUrl, originalUri, extraCookies = []) {
   const authorizeUrl =
     `${COGNITO_DOMAIN}/oauth2/authorize` +
     `?response_type=code` +
     `&client_id=${encodeURIComponent(APP_CLIENT_ID)}` +
-    `&redirect_uri=${encodeURIComponent(CALLBACK_URL)}` +
+    `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
     `&scope=${encodeURIComponent('openid email profile')}` +
     `&identity_provider=Google` +
     `&state=${encodeURIComponent(originalUri || '/')}`;

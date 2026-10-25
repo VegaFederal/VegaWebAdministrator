@@ -10,11 +10,13 @@
 #   USER_POOL_ID        Cognito User Pool ID            (from SSM)
 #   APP_CLIENT_ID       Cognito App Client ID           (from SSM)
 #   COGNITO_DOMAIN      Cognito Hosted UI base URL       (from SSM, no trailing slash)
-#   CALLBACK_URL        This branch's https://<cf>/callback
 #   AWS_REGION          Region of the Cognito pool (us-east-1)
 #   DEPLOYMENT_BUCKET   S3 bucket for the ZIP
-#   ENVIRONMENT         Branch/environment slug
+#   ENVIRONMENT         Environment slug (always "main" — this is a shared function)
 #   TEMPLATE_BUCKET     S3 bucket holding the nested CloudFormation templates
+#
+# Note: the callback URL is NOT baked in. The function derives it per request
+# from the Host header, so one shared function serves every distribution.
 #
 # Echoes:
 #   AUTH_EDGE_S3_KEY=<key>      S3 key of the uploaded Lambda ZIP
@@ -25,7 +27,6 @@ set -euo pipefail
 : "${USER_POOL_ID:?}"
 : "${APP_CLIENT_ID:?}"
 : "${COGNITO_DOMAIN:?}"
-: "${CALLBACK_URL:?}"
 : "${AWS_REGION:?}"
 : "${DEPLOYMENT_BUCKET:?}"
 : "${ENVIRONMENT:?}"
@@ -41,7 +42,6 @@ sed -i.bak \
   -e "s|@@USER_POOL_ID@@|${USER_POOL_ID}|g" \
   -e "s|@@APP_CLIENT_ID@@|${APP_CLIENT_ID}|g" \
   -e "s|@@COGNITO_DOMAIN@@|${COGNITO_DOMAIN}|g" \
-  -e "s|@@CALLBACK_URL@@|${CALLBACK_URL}|g" \
   -e "s|@@AWS_REGION@@|${AWS_REGION}|g" \
   "$BUILD_DIR/index.js"
 rm -f "$BUILD_DIR/index.js.bak"

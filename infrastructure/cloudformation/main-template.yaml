@@ -115,7 +115,15 @@ Conditions:
   DeployCognito: !And
     - !Condition HasCognitoConfig
     - !Condition IsMainBranch
-  DeployAuthEdge: !Not [!Equals [!Ref AuthEdgeS3Key, '']]
+  # The auth-edge function is a SHARED resource: created only on main, and only
+  # once its packaged ZIP key is known. Branches never create it — they read the
+  # published version ARN from SSM and attach it to their own CloudFront.
+  DeployAuthEdge: !And
+    - !Not [!Equals [!Ref AuthEdgeS3Key, '']]
+    - !Condition IsMainBranch
+  # CloudFront attaches the auth-edge trigger whenever a version ARN is supplied
+  # (on main from the AuthEdgeStack output, on branches from SSM via CI).
+  HasAuthEdgeVersion: !Not [!Equals [!Ref AuthEdgeVersionArn, '']]
 
 Resources:
   # Secrets stack for Google SSO.
@@ -171,6 +179,13 @@ Resources:
           Value: !Ref Environment
 
   # S3 and CloudFront Stack
+  #
+  # AuthEdgeVersionArn resolution:
+  #   - On main, when the auth-edge function is being created this run, use the
+  #     AuthEdgeStack output directly (keeps create + attach in one deploy).
+  #   - Otherwise use the AuthEdgeVersionArn parameter, which CI populates from
+  #     the shared SSM value on branch deploys (and on main re-deploys that don't
+  #     repackage the function).
   StaticWebsiteStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -181,7 +196,10 @@ Resources:
         WwwDomain: !Ref WwwDomain
         CertificateArn: !Ref CertificateArn
         CreateHostedZone: !Ref CreateHostedZone
-        AuthEdgeVersionArn: !Ref AuthEdgeVersionArn
+        AuthEdgeVersionArn: !If
+          - DeployAuthEdge
+          - !GetAtt AuthEdgeStack.Outputs.AuthEdgeVersionArn
+          - !Ref AuthEdgeVersionArn
       Tags:
         - Key: Environment
           Value: !Ref Environment

@@ -72,6 +72,17 @@ Resources:
       FunctionName: !Ref AuthEdgeFunction
       Description: !Sub "auth-edge ${Environment} ${AuthEdgeS3Key}"
 
+  # Publish the current version ARN to SSM so branch deployments can read it and
+  # attach the SHARED function to their own CloudFront distribution. This is the
+  # same shared-discovery pattern used for the Cognito User Pool.
+  SsmAuthEdgeVersionArn:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /vegawebadmin/shared/authedge/VersionArn
+      Type: String
+      Value: !Ref AuthEdgeFunctionVersion@@VERSION_HASH@@
+      Description: Shared auth-edge Lambda@Edge version ARN (main) — read by branch deployments
+
 Outputs:
   AuthEdgeFunctionArn:
     Description: Unqualified ARN of the auth-edge function
