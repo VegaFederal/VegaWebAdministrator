@@ -15,11 +15,7 @@
  *              Cognito Hosted UI (Google login) with the original URI in `state`.
  */
 
-// CONFIG - replaced by sed during CI packaging (do not edit the tokens) ──
-// These are all SHARED across every environment (one Cognito pool on main), so
-// they can be baked in. The callback URL is NOT baked in — it is derived per
-// request from the Host header, which lets a single shared function serve every
-// branch/prod distribution without redeployment.
+// CONFIG - replaced by sed during CI packaging (do not edit the tokens) 
 const USER_POOL_ID = '@@USER_POOL_ID@@';
 const APP_CLIENT_ID = '@@APP_CLIENT_ID@@';
 const COGNITO_DOMAIN = '@@COGNITO_DOMAIN@@'; // e.g. https://pool.auth.us-east-1.amazoncognito.com

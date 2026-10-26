@@ -59,11 +59,10 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # CloudFront can only associate a specific version ARN.
-  #
   # The logical ID carries the content hash (@@VERSION_HASH@@ is substituted in CI).
   # A new commit => new hash => a NEW logical ID, so CloudFormation CREATES a fresh
-  # version and leaves the previous one in place (never deletes a replicated version).
+  # version and leaves the previous one in place.   
+  # TODO:  Verify that this does not create orphaned functions when things change.
   AuthEdgeFunctionVersion@@VERSION_HASH@@:
     Type: AWS::Lambda::Version
     DeletionPolicy: Retain
@@ -72,9 +71,7 @@ Resources:
       FunctionName: !Ref AuthEdgeFunction
       Description: !Sub "auth-edge ${Environment} ${AuthEdgeS3Key}"
 
-  # Publish the current version ARN to SSM so branch deployments can read it and
-  # attach the SHARED function to their own CloudFront distribution. This is the
-  # same shared-discovery pattern used for the Cognito User Pool.
+  # Publish the current version ARN to SSM so branch deployments can read it.
   SsmAuthEdgeVersionArn:
     Type: AWS::SSM::Parameter
     Properties:

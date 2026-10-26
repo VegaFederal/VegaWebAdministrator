@@ -183,7 +183,7 @@ Resources:
   # AuthEdgeVersionArn resolution:
   #   - On main, when the auth-edge function is being created this run, use the
   #     AuthEdgeStack output directly (keeps create + attach in one deploy).
-  #   - Otherwise use the AuthEdgeVersionArn parameter, which CI populates from
+  #   - else use the AuthEdgeVersionArn parameter, which CI populates from
   #     the shared SSM value on branch deploys (and on main re-deploys that don't
   #     repackage the function).
   StaticWebsiteStack:

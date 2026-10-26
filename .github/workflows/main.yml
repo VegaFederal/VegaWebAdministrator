@@ -57,9 +57,9 @@ jobs:
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
           BRANCH_SAFE=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g' | cut -c1-20)
 
-          # Safety guard: never run branch cleanup against the main stack. Main owns
-          # the SHARED Cognito and auth-edge (Lambda@Edge) resources — deleting it
-          # would tear down the replicated function and break every branch.
+          # Do not run branch cleanup against the main stack. Main owns
+          # the SHARED Cognito and auth-edge (Lambda@Edge) resources deleting it
+          # would tear down the replicated function and break everything.
           if [ "$BRANCH_SAFE" = "main" ]; then
             echo "Refusing to run branch cleanup against 'main' — it owns shared Cognito/auth-edge resources."
             exit 1
@@ -77,9 +77,8 @@ jobs:
           TEMPLATE_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Parameters[?ParameterKey=='TemplateBucket'].ParameterValue" --output text 2>/dev/null || echo "")
           WEBSITE_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteBucketName'].OutputValue" --output text 2>/dev/null || echo "")
           CLOUDFRONT_LOGS_BUCKET=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='CloudFrontLogsBucketName'].OutputValue" --output text 2>/dev/null || echo "")
-          # Capture the CloudFront domain NOW, before the stack is deleted, so the
-          # callback-URL removal step at the end can still identify this branch's
-          # stale entries on the shared Cognito client.
+          # Capture the CloudFront so the callback-URL removal step at the end can still 
+          # find this branch's stale entries on the shared Cognito client.
           CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" --output text 2>/dev/null || echo "")
           echo "TEMPLATE_BUCKET=$TEMPLATE_BUCKET" >> $GITHUB_ENV
           echo "WEBSITE_BUCKET=$WEBSITE_BUCKET" >> $GITHUB_ENV
@@ -116,10 +115,6 @@ jobs:
             aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }} || true
             
             # Force-delete any nested stacks left behind by the branch stack.
-            #
-            # NOTE: branches never create CognitoStack or AuthEdgeStack — those are
-            # main-only (shared). So they are deliberately NOT in this list; a branch
-            # teardown must never touch the shared replicated Lambda@Edge function.
             NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ApiLambdaStack" "${{ env.STACK_NAME }}-StaticWebsiteStack")
             
             for prefix in "${NESTED_STACK_PREFIXES[@]}"; do
@@ -154,8 +149,7 @@ jobs:
             exit 0
           fi
 
-          # CF_DOMAIN was captured in "Get bucket names" BEFORE the stack was
-          # deleted — the stack no longer exists at this point, so we can't query it.
+          # CF_DOMAIN was captured in "Get bucket names" 
           CF_DOMAIN="${{ env.CF_DOMAIN }}"
           if [ -z "$CF_DOMAIN" ]; then
             echo "CloudFront domain was not captured before teardown — skipping callback removal."
@@ -452,14 +446,11 @@ jobs:
 
       # ──────────────────────────────────────────────────────────────────────
       # SHARED auth-edge model:
-      #   MAIN   packages the function (config baked in, callback derived from the
-      #          Host header at runtime), deploys it, publishes the version ARN to
+      #   MAIN   packages and deploys it, publishes the version ARN to
       #          SSM, and attaches it to main's CloudFront.
-      #   BRANCH never packages or creates a function. It reads the shared version
+      #   BRANCH never deploy. Reads the shared version
       #          ARN from SSM and attaches that one function to its own CloudFront.
-      # This removes per-branch Lambda@Edge replication and its teardown problems.
       # ──────────────────────────────────────────────────────────────────────
-
       # MAIN ONLY: package + deploy the shared auth-edge function.
       - name: Package and deploy shared auth-edge Lambda@Edge (main only)
         if: env.IS_MAIN_BRANCH == 'true'
@@ -496,7 +487,6 @@ jobs:
           echo "AUTH_EDGE_READY=true" >> $GITHUB_ENV
 
       # MAIN ONLY: create/update the function (DeployAuthEdge gates on main + S3 key).
-      # This also publishes the version ARN to SSM via the AuthEdgeStack.
       - name: Deploy CloudFormation — create/update shared auth-edge (main only)
         if: env.IS_MAIN_BRANCH == 'true' && env.AUTH_EDGE_READY == 'true'
         uses: aws-actions/aws-cloudformation-github-deploy@v1
@@ -539,11 +529,6 @@ jobs:
           fi
 
       # Attach the shared function to THIS environment's CloudFront.
-      #
-      # IMPORTANT: On main we must keep passing AuthEdgeS3Key so DeployAuthEdge
-      # stays true and the AuthEdgeStack (the function) is NOT torn down. On
-      # branches AuthEdgeS3Key is empty (AUTH_EDGE_S3_KEY unset), so DeployAuthEdge
-      # is false and no function is created — only the CloudFront association updates.
       - name: Deploy CloudFormation — attach shared auth-edge to CloudFront
         if: env.AUTH_EDGE_ATTACH == 'true'
         uses: aws-actions/aws-cloudformation-github-deploy@v1
