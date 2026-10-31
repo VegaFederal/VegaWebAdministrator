@@ -805,6 +805,13 @@ jobs:
         run: |
           BRANCH_NAME="${{ github.event.inputs.branch || 'main' }}"
           BRANCH_SAFE=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g' | cut -c1-20)
+          # If the branch name is main then exit, we do not want to
+          # delete the main branch as it owns the Edge lambda
+          # used by all development branches.
+          if [ "$BRANCH_SAFE" = "main" ]; then          
+            echo "Refusing to run branch cleanup against 'main' — it owns shared Cognito/auth-edge resources."
+            exit 1
+          fi
           STACK_NAME="${PROJECT_NAME}-${BRANCH_SAFE}"
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
           echo "BRANCH_SAFE=$BRANCH_SAFE" >> $GITHUB_ENV
