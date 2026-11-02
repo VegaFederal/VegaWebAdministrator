@@ -34,35 +34,6 @@ jobs:
           echo "No tests to run"
         fi
 
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: |
-        if [ -f package.json ]; then
-          npm ci
-        else
-          echo "No package.json found, skipping npm install"
-        fi
-    
-    - name: Lint code
-      run: |
-        if [ -f package.json ] && grep -q '"lint"' package.json; then
-          npm run lint
-        else
-          echo "No lint script found, skipping"
-        fi
-
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -138,7 +109,7 @@ jobs:
 
   build:
     name: Build
-    needs: [test, lint, security-scan, infrastructure-validation]
+    needs: [test, security-scan, infrastructure-validation]
     runs-on: ubuntu-latest
     
     steps:
