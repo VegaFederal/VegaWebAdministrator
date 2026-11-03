@@ -4,6 +4,9 @@ import os
 import base64
 import uuid
 from decimal import Decimal
+import logging
+
+logging.getLogger().setLevel(logging.DEBUG)
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['TABLE_NAME'])
@@ -157,6 +160,7 @@ def update_team_member(event):
     path_params = event.get('pathParameters') or {}
     member_id = path_params.get('id')
     if not member_id:
+        logging.info("update team member, return status code 400")
         return {
             "statusCode": 400,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
