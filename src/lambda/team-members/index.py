@@ -160,7 +160,6 @@ def update_team_member(event):
     path_params = event.get('pathParameters') or {}
     member_id = path_params.get('id')
     if not member_id:
-        logging.info("update team member, return status code 400")
         return {
             "statusCode": 400,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
@@ -185,6 +184,8 @@ def update_team_member(event):
     if 'image' in body:
         try:
             new_image_key, new_image_url = upload_image_data_url(body['image'])
+            logging.info("update team member, return status code 400")
+
         except ValueError as exc:
             return {
                 "statusCode": 400,
