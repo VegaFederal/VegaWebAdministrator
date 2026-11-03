@@ -6,7 +6,7 @@ import uuid
 from decimal import Decimal
 import logging
 
-logging.getLogger().setLevel(logging.INFO)
+logging.basicConfig (level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['TABLE_NAME'])
