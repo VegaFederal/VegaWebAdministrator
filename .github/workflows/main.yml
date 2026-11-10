@@ -646,6 +646,7 @@ jobs:
             echo "  $IDP_RESPONSE_URL"
           fi
           echo "========================================"
+          echo "CloudFront default domain: https://${{ env.CF_DOMAIN }}" >> "$GITHUB_STEP_SUMMARY"
 
   deploy-production:
     if: github.event.inputs.action == 'deploy-production' || (github.ref == 'refs/heads/production' && github.event_name == 'push')
