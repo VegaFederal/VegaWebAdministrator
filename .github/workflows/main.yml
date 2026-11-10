@@ -780,6 +780,8 @@ jobs:
             AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
             DomainName=${{ env.DOMAIN_NAME }},
             WwwDomain=${{ env.WWW_DOMAIN }},
+            AllowedGoogleDomain=,
+            AllowedGroupEmail=${{ env.ALLOWED_GROUP_EMAIL }},
             CertificateArn=${{ env.CERTIFICATE_ARN }},
             CreateHostedZone=${{ env.CREATE_HOSTED_ZONE }}
           no-fail-on-empty-changeset: "1"

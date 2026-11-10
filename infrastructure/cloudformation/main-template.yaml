@@ -83,6 +83,13 @@ Parameters:
       The deploy job reads it after the secret exists and passes it here.
       Empty on the deploy that first creates the secret.
 
+  AllowedGoogleDomain:
+    Type: String
+    Default: ""
+    Description: >
+      Google Workspace domain allowed to sign in. Empty on production;
+      the Google OAuth client enforces the domain there.
+
   AllowedGroupEmail:
     Type: String
     Default: ""
