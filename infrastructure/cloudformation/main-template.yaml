@@ -74,6 +74,15 @@ Parameters:
     NoEcho: true
     Description: Google OAuth client secret (read from GitHub Actions secret in CI)
 
+  OriginVerifySecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >
+      Token from Secrets Manager secret /${Environment}/origin-verify.
+      The deploy job reads it after the secret exists and passes it here.
+      Empty on the deploy that first creates the secret.
+
   AllowedGroupEmail:
     Type: String
     Default: ""

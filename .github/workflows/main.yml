@@ -341,6 +341,42 @@ jobs:
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
+      # Pass 1 creates /${Environment}/origin-verify. Read the token and store it
+      # on the stack. NoEcho on the template parameter keeps it out of the logs.
+      - name: Resolve origin verify secret
+        run: |
+          SECRET_JSON=$(aws secretsmanager get-secret-value \
+            --secret-id "/${ENVIRONMENT}/origin-verify" \
+            --query SecretString \
+            --output text)
+          ORIGIN_VERIFY_SECRET=$(printf '%s' "$SECRET_JSON" | jq -r '.token')
+          if [ -z "$ORIGIN_VERIFY_SECRET" ] || [ "$ORIGIN_VERIFY_SECRET" = "null" ]; then
+            echo "ERROR: /${ENVIRONMENT}/origin-verify has no token"
+            exit 1
+          fi
+          echo "::add-mask::$ORIGIN_VERIFY_SECRET"
+          echo "ORIGIN_VERIFY_SECRET=$ORIGIN_VERIFY_SECRET" >> "$GITHUB_ENV"
+
+      - name: Deploy CloudFormation stack — store origin verify secret
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: ${{ env.STACK_NAME }}
+          template: infrastructure/cloudformation/main-template.yaml
+          parameter-overrides: >-
+            Environment=${{ env.ENVIRONMENT }},
+            VpcId=${{ env.VPC_ID }},
+            SubnetIds=${{ env.SUBNET_IDS }},
+            TemplateBucket=${{ env.TEMPLATE_BUCKET }},
+            DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
+            TableName=${{ env.DB_TABLE_NAME }},
+            TableArn=${{ env.DB_TABLE_ARN }},
+            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
+            CallbackUrl=,
+            LogoutUrl=,
+            OriginVerifySecret=${{ env.ORIGIN_VERIFY_SECRET }}
+          no-fail-on-empty-changeset: "1"
+          capabilities: "CAPABILITY_NAMED_IAM"
+
       #  Resolve CloudFront domain 
       - name: Resolve CloudFront domain
         run: |
@@ -383,7 +419,8 @@ jobs:
             LogoutUrl=${{ env.LOGOUT_URL }},
             AllowedGroupEmail=,
             GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
-            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }}
+            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
+            OriginVerifySecret=${{ env.ORIGIN_VERIFY_SECRET }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
@@ -507,7 +544,8 @@ jobs:
             AllowedGroupEmail=,
             GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
             GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
-            AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }}
+            AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }},
+            OriginVerifySecret=${{ env.ORIGIN_VERIFY_SECRET }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
@@ -550,7 +588,8 @@ jobs:
             GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
             GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
             AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }},
-            AuthEdgeVersionArn=${{ env.AUTH_EDGE_VERSION_ARN }}
+            AuthEdgeVersionArn=${{ env.AUTH_EDGE_VERSION_ARN }},
+            OriginVerifySecret=${{ env.ORIGIN_VERIFY_SECRET }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
