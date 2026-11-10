@@ -816,10 +816,11 @@ jobs:
 
       - name: Get CloudFront URL
         run: |
-          CF_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteUrl'].OutputValue" --output text)
+          CF_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" --output text)
           echo "Production deployment completed!"
           echo "Your production website is available at: https://$CF_URL"
           echo "Team members API: $API_URL"
+          echo "Add CNAME: admin.vegafederal.com → $CF_URL" >> "$GITHUB_STEP_SUMMARY"
   cleanup:
     if: github.event.inputs.action == 'cleanup'
     runs-on: ubuntu-latest
