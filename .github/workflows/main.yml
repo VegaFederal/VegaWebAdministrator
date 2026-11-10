@@ -672,6 +672,7 @@ jobs:
           DOMAIN_NAME=$(jq -r '.domainName // ""' $CONFIG_FILE)
           WWW_DOMAIN=$(jq -r '.wwwDomain // ""' $CONFIG_FILE)
           CERTIFICATE_ARN=$(jq -r '.certificateArn // ""' $CONFIG_FILE)
+          ALLOWED_GROUP_EMAIL=$(jq -r '.allowedGroupEmail // ""' $CONFIG_FILE)
           CREATE_HOSTED_ZONE=$(jq -r '.createHostedZone // "false"' $CONFIG_FILE)
 
           echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
@@ -680,6 +681,7 @@ jobs:
           echo "DOMAIN_NAME=$DOMAIN_NAME" >> $GITHUB_ENV
           echo "WWW_DOMAIN=$WWW_DOMAIN" >> $GITHUB_ENV
           echo "CERTIFICATE_ARN=$CERTIFICATE_ARN" >> $GITHUB_ENV
+          echo "ALLOWED_GROUP_EMAIL=$ALLOWED_GROUP_EMAIL" >> $GITHUB_ENV
           echo "CREATE_HOSTED_ZONE=$CREATE_HOSTED_ZONE" >> $GITHUB_ENV
 
       - name: Set production environment variables
