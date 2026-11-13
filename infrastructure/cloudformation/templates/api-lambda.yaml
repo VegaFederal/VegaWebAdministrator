@@ -99,6 +99,10 @@ Resources:
           TABLE_ARN: !Ref TableArn
           BUCKET_NAME: !Ref AssetsBucketName
           ALLOWED_ORIGIN: !Ref AllowedOrigin
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: WARN
       Code:
         S3Bucket: !Ref DeploymentBucket
         S3Key: !Sub ${Environment}/lambda/team-members/index.zip
