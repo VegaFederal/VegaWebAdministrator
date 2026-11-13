@@ -35,12 +35,30 @@ Parameters:
       Qualified version ARN of the auth edge function. When set, it is
       attached to the default cache behavior as a viewer-request trigger.
 
+  ApiDomainName:
+    Type: String
+    Description: API Gateway domain name used as the second CloudFront origin (no scheme)
+
+  ApiOriginPath:
+    Type: String
+    Description: API Gateway stage path prefix for the origin (e.g. /api)
+
+  OriginVerifySecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      Plaintext X-Origin-Verify token (resolved from Secrets Manager in CI).
+      CloudFront adds it to every request sent to the API origin; the regional WAF
+      rejects API requests that don't carry it.
+
 Conditions:
   HasCustomDomain: !Not [!Equals [!Ref DomainName, ""]]
   HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
   HasWwwDomain: !Not [!Equals [!Ref WwwDomain, ""]]
   ShouldCreateHostedZone: !And [!Condition HasCustomDomain, !Equals [!Ref CreateHostedZone, "true"]]
   HasAuthEdge: !Not [!Equals [!Ref AuthEdgeVersionArn, ""]]
+  HasOriginVerifySecret: !Not [!Equals [!Ref OriginVerifySecret, ""]]
 
 Resources:
   # S3 Bucket for CloudFront logs
@@ -107,6 +125,20 @@ Resources:
             S3OriginConfig:
               OriginAccessIdentity: ""
             OriginAccessControlId: !Ref CloudFrontOriginAccessControl
+          # API Gateway origin. CloudFront injects X-Origin-Verify so the regional
+          # WAF will accept the request; direct calls to the API URL lack it.
+          - DomainName: !Ref ApiDomainName
+            Id: ApiOrigin
+            OriginPath: !Ref ApiOriginPath
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+            OriginCustomHeaders: !If
+              - HasOriginVerifySecret
+              - - HeaderName: X-Origin-Verify
+                  HeaderValue: !Ref OriginVerifySecret
+              - !Ref AWS::NoValue
         Enabled: true
         DefaultRootObject: index.html
         DefaultCacheBehavior:
@@ -128,6 +160,30 @@ Resources:
                 LambdaFunctionARN: !Ref AuthEdgeVersionArn
                 IncludeBody: false
             - !Ref AWS::NoValue
+        CacheBehaviors:
+          # The app calls the API at /team-members on the same domain, so the browser
+          # never sees the API Gateway URL. Never cached; the auth trigger applies
+          # here too so unauthenticated users cannot call the API through CloudFront.
+          - PathPattern: /team-members*
+            TargetOriginId: ApiOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - POST
+              - PATCH
+              - DELETE
+            # Managed-CachingDisabled
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: !Ref ApiOriginRequestPolicy
+            LambdaFunctionAssociations: !If
+              - HasAuthEdge
+              - - EventType: viewer-request
+                  LambdaFunctionARN: !Ref AuthEdgeVersionArn
+                  IncludeBody: false
+              - !Ref AWS::NoValue
         PriceClass: PriceClass_100
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
@@ -140,6 +196,24 @@ Resources:
             ResponseCode: 200
             ResponsePagePath: /index.html
             ErrorCachingMinTTL: 0
+
+  # Forward only what the API needs. 
+  ApiOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub "${AWS::StackName}-ApiOriginRequest"
+        CookiesConfig:
+          CookieBehavior: none
+        QueryStringsConfig:
+          QueryStringBehavior: all
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers:
+            - Origin
+            - Referer
+            - Content-Type
+            - Accept
 
   # Security Headers Policy
   SecurityHeadersPolicy:

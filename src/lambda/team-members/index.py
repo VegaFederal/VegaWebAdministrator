@@ -62,8 +62,30 @@ def upload_image_data_url(data_url):
     return key, f"https://{BUCKET_NAME}.s3.amazonaws.com/{key}"
 
 
+def _normalize_headers(event):
+    # REST API (payload v1) keeps the caller's header casing and may send null;
+    # HTTP API (payload v2) lowercases. Normalize so lookups work for both.
+    return {str(k).lower(): v for k, v in (event.get('headers') or {}).items()}
+
+
+def _http_method(event):
+    http = (event.get('requestContext') or {}).get('http')
+    if http and http.get('method'):
+        return http['method']
+    return event.get('httpMethod', '')
+
+
+def _route_key(event):
+    # HTTP API supplies routeKey ("PUT /team-members/{id}"). REST API supplies
+    # httpMethod + resource, which together give the same string.
+    route_key = event.get('routeKey')
+    if route_key:
+        return route_key
+    return f"{event.get('httpMethod', '')} {event.get('resource', '')}"
+
+
 def handler(event, context):
-    headers = event.get('headers', {})
+    headers = _normalize_headers(event)
     origin = headers.get('origin', '')
     referer = headers.get('referer', '')
 
@@ -74,8 +96,8 @@ def handler(event, context):
             "body": json.dumps({"error": "Forbidden"})
         }
 
-    method = event['requestContext']['http']['method']
-    route_key = event.get('routeKey', '')
+    method = _http_method(event)
+    route_key = _route_key(event)
 
     try:
         if method == 'GET':

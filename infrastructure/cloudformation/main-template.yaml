@@ -107,6 +107,16 @@ Parameters:
       Version ARN of the auth-edge function, fed back into CloudFront to attach the
       viewer-request trigger. 
 
+  # Origin lockdown — plaintext token read from Secrets Manager by CI (the secret
+  # itself is created by SecretsStack). Must be supplied on EVERY deploy.
+  OriginVerifySecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      Plaintext X-Origin-Verify token from Secrets Manager (/<env>/origin-verify).
+      Injected by CloudFront and enforced by the regional API WAF.
+
 Conditions:
   HasVpcConfig: !Not [!Equals [!Ref VpcId, '']]
   # Cognito is only deployed on the main branch — all other branches share it
@@ -137,6 +147,18 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
+  # WAF for the API (origin-verify header + managed rules + rate limit)
+  WafApiStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/waf-api.yaml
+      Parameters:
+        Environment: !Ref Environment
+        OriginVerifySecret: !Ref OriginVerifySecret
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
   # Security Groups Stack
   SecurityGroupsStack:
     Type: AWS::CloudFormation::Stack
@@ -161,6 +183,7 @@ Resources:
         TableArn: !Ref TableArn
         AssetsBucketName: !Ref AssetsBucketName
         AllowedOrigin: !Ref AllowedOrigin
+        ApiWafWebAclArn: !GetAtt WafApiStack.Outputs.ApiWafWebAclArn
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -200,6 +223,9 @@ Resources:
           - DeployAuthEdge
           - !GetAtt AuthEdgeStack.Outputs.AuthEdgeVersionArn
           - !Ref AuthEdgeVersionArn
+        ApiDomainName: !GetAtt ApiLambdaStack.Outputs.ApiDomainName
+        ApiOriginPath: !GetAtt ApiLambdaStack.Outputs.ApiStagePath
+        OriginVerifySecret: !Ref OriginVerifySecret
       Tags:
         - Key: Environment
           Value: !Ref Environment

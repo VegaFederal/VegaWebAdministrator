@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: API Gateway for VegaWebAdministrator
+Description: API Gateway (REST API) for VegaWebAdministrator, protected by a regional WAF
 
 Parameters:
   Environment:
@@ -22,32 +22,138 @@ Parameters:
     Type: String
     Default: ""
     Description: Allowed site origin (e.g. https://vegafederal.com)
+  ApiWafWebAclArn:
+    Type: String
+    Description: >
+      ARN of the regional WAF web ACL (from waf-api.yaml). Required — the API must
+      never be deployed without it. The ACL enforces the X-Origin-Verify header.
 
 Resources:
-  TeamMembersApi:
-    Type: 'AWS::ApiGatewayV2::Api'
+  # REST API, Had to do this for WAF which doesn't work with HTTP APIs.
+  # The browser reaches this through CloudFront at /team-members, same origin as the app.
+  TeamMembersRestApi:
+    Type: AWS::ApiGateway::RestApi
     Properties:
       Name: !Sub VegaWebAdmin-TeamMembers-${Environment}
-      ProtocolType: HTTP
-      CorsConfiguration:
-        AllowOrigins:
-          - '*'
-        AllowMethods:
-          - GET
-          - POST
-          - PUT
-          - DELETE
-          - OPTIONS
-        AllowHeaders:
-          - content-type
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
 
-  TeamMembersIntegration:
-    Type: AWS::ApiGatewayV2::Integration
+  # Resources: /team-members, /team-members/order, /team-members/{id}
+  # Static "order" has higher priority than {id}.
+  TeamMembersResource:
+    Type: AWS::ApiGateway::Resource
     Properties:
-      ApiId: !Ref TeamMembersApi
-      IntegrationType: AWS_PROXY
-      IntegrationUri: !GetAtt TeamMembersFunction.Arn
-      PayloadFormatVersion: "2.0"
+      RestApiId: !Ref TeamMembersRestApi
+      ParentId: !GetAtt TeamMembersRestApi.RootResourceId
+      PathPart: team-members
+
+  TeamMembersOrderResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      ParentId: !Ref TeamMembersResource
+      PathPart: order
+
+  TeamMembersIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      ParentId: !Ref TeamMembersResource
+      PathPart: '{id}'
+
+  # Authentication is handled at the CloudFront edge
+  # and the WAF origin check.
+  GetTeamMembersMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      ResourceId: !Ref TeamMembersResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TeamMembersFunction.Arn}/invocations
+
+  PostTeamMembersMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      ResourceId: !Ref TeamMembersResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TeamMembersFunction.Arn}/invocations
+
+  PutTeamMembersOrderMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      ResourceId: !Ref TeamMembersOrderResource
+      HttpMethod: PUT
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TeamMembersFunction.Arn}/invocations
+
+  PutTeamMembersIdMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      ResourceId: !Ref TeamMembersIdResource
+      HttpMethod: PUT
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TeamMembersFunction.Arn}/invocations
+
+  DeleteTeamMembersIdMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      ResourceId: !Ref TeamMembersIdResource
+      HttpMethod: DELETE
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TeamMembersFunction.Arn}/invocations
+
+  # With this change, REST API deployments will not happen just because of a code change. 
+  # CloudFormation only redeploys when the resource itself changes.  if you add/remove/modify 
+  # a route or method above, bump the revision in the Description below to force a new deployment.
+  TeamMembersDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - GetTeamMembersMethod
+      - PostTeamMembersMethod
+      - PutTeamMembersOrderMethod
+      - PutTeamMembersIdMethod
+      - DeleteTeamMembersIdMethod
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      #Bump this version if you change a route or add a route.
+      Description: "routes revision 1"
+
+  TeamMembersRestStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      DeploymentId: !Ref TeamMembersDeployment
+      StageName: api
+
+  # Associate the regional WAF with the stage. Direct requests without the
+  # X-Origin-Verify header are rejected here with a 403.
+  ApiWafAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Sub arn:aws:apigateway:${AWS::Region}::/restapis/${TeamMembersRestApi}/stages/${TeamMembersRestStage}
+      WebACLArn: !Ref ApiWafWebAclArn
 
   TeamMembersLambdaRole:
     Type: AWS::IAM::Role
@@ -109,55 +215,17 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref TeamMembersFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${TeamMembersApi}/*/*
-
-  GetTeamMembersRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref TeamMembersApi
-      RouteKey: GET /team-members
-      Target: !Sub integrations/${TeamMembersIntegration}
-
-  PostTeamMembersRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref TeamMembersApi
-      RouteKey: POST /team-members
-      Target: !Sub integrations/${TeamMembersIntegration}
-
-  PutTeamMembersRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref TeamMembersApi
-      RouteKey: PUT /team-members/{id}
-      Target: !Sub integrations/${TeamMembersIntegration}
-  
-  PutTeamMembersOrderRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref TeamMembersApi
-      RouteKey: PUT /team-members/order
-      Target: !Sub integrations/${TeamMembersIntegration}
-
-  DeleteTeamMembersRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref TeamMembersApi
-      RouteKey: DELETE /team-members/{id}
-      Target: !Sub integrations/${TeamMembersIntegration}
-
-  TeamMembersApiStage:
-    Type: AWS::ApiGatewayV2::Stage
-    Properties:
-      ApiId: !Ref TeamMembersApi
-      StageName: $default
-      AutoDeploy: true
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${TeamMembersRestApi}/*/*
 
 Outputs:
   ApiEndpoint:
-    Description: Team Members API endpoint URL
-    Value: !Sub https://${TeamMembersApi}.execute-api.${AWS::Region}.amazonaws.com/team-members
+    Description: Direct API endpoint. Blocked by the WAF unless X-Origin-Verify is sent, so browsers use /team-members via CloudFront.
+    Value: !Sub https://${TeamMembersRestApi}.execute-api.${AWS::Region}.amazonaws.com/${TeamMembersRestStage}/team-members
 
   ApiDomainName:
-    Description: Team Members API domain name
-    Value: !Sub ${TeamMembersApi}.execute-api.${AWS::Region}.amazonaws.com
+    Description: API Gateway domain name (CloudFront origin domain)
+    Value: !Sub ${TeamMembersRestApi}.execute-api.${AWS::Region}.amazonaws.com
+
+  ApiStagePath:
+    Description: Stage path prefix (CloudFront origin path)
+    Value: !Sub /${TeamMembersRestStage}

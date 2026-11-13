@@ -115,7 +115,7 @@ jobs:
             aws cloudformation wait stack-delete-complete --stack-name ${{ env.STACK_NAME }} || true
             
             # Force-delete any nested stacks left behind by the branch stack.
-            NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ApiLambdaStack" "${{ env.STACK_NAME }}-StaticWebsiteStack")
+            NESTED_STACK_PREFIXES=("${{ env.STACK_NAME }}-SecurityGroupsStack" "${{ env.STACK_NAME }}-ApiLambdaStack" "${{ env.STACK_NAME }}-StaticWebsiteStack" "${{ env.STACK_NAME }}-WafApiStack")
             
             for prefix in "${NESTED_STACK_PREFIXES[@]}"; do
               for stack in $(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --query "StackSummaries[?starts_with(StackName, '$prefix')].StackName" --output text 2>/dev/null || echo ""); do
@@ -319,7 +319,27 @@ jobs:
             echo "IS_MAIN_BRANCH=false" >> $GITHUB_ENV
           fi
 
-      # ── Pass 1: deploy infrastructure without Cognito.
+      # Origin-verify secret (CloudFront -> API WAF)
+      # The secret is CREATED by the stack (secrets.yaml), but its plaintext value must
+      # be passed back in as a parameter. If the stack already exists we read it now so
+      # pass 1 keeps the API locked; on the very first deploy it doesn't exist yet, the
+      # token is empty, the API WAF fails closed, and a later pass applies the value.
+      - name: Resolve origin-verify secret (if it already exists)
+        run: |
+          TOKEN=$(aws secretsmanager get-secret-value \
+            --secret-id "/${{ env.ENVIRONMENT }}/origin-verify" \
+            --query SecretString --output text 2>/dev/null | jq -r '.token // empty' 2>/dev/null || echo "")
+          if [ -n "$TOKEN" ]; then
+            echo "::add-mask::$TOKEN"
+            echo "ORIGIN_VERIFY_TOKEN=$TOKEN" >> $GITHUB_ENV
+            echo "ORIGIN_SECRET_NEW=false" >> $GITHUB_ENV
+          else
+            echo "Origin-verify secret does not exist yet (first deploy of this environment)."
+            echo "ORIGIN_VERIFY_TOKEN=" >> $GITHUB_ENV
+            echo "ORIGIN_SECRET_NEW=true" >> $GITHUB_ENV
+          fi
+
+      #  Pass 1: deploy infrastructure without Cognito.
       #    CallbackUrl is empty so DeployCognito condition is false — Cognito skipped.
       #    CloudFront is created here and its domain is read after this step.
       - name: Deploy CloudFormation stack — pass 1
@@ -337,11 +357,26 @@ jobs:
             TableArn=${{ env.DB_TABLE_ARN }},
             AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
             CallbackUrl=,
-            LogoutUrl=
+            LogoutUrl=,
+            OriginVerifySecret=${{ env.ORIGIN_VERIFY_TOKEN }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
       #  Resolve CloudFront domain 
+      # Now the stack has certainly created the secret: read its value for every
+      # later pass (idempotent when it was already resolved before pass 1).
+      - name: Resolve origin-verify secret (created by the stack)
+        run: |
+          TOKEN=$(aws secretsmanager get-secret-value \
+            --secret-id "/${{ env.ENVIRONMENT }}/origin-verify" \
+            --query SecretString --output text | jq -r '.token // empty')
+          if [ -z "$TOKEN" ]; then
+            echo "ERROR: /${{ env.ENVIRONMENT }}/origin-verify has no token after pass 1."
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          echo "ORIGIN_VERIFY_TOKEN=$TOKEN" >> $GITHUB_ENV
+
       - name: Resolve CloudFront domain
         run: |
           CF_DOMAIN=$(aws cloudformation describe-stacks \
@@ -383,7 +418,8 @@ jobs:
             LogoutUrl=${{ env.LOGOUT_URL }},
             AllowedGroupEmail=,
             GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
-            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }}
+            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
+            OriginVerifySecret=${{ env.ORIGIN_VERIFY_TOKEN }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
@@ -507,7 +543,8 @@ jobs:
             AllowedGroupEmail=,
             GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
             GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
-            AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }}
+            AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }},
+            OriginVerifySecret=${{ env.ORIGIN_VERIFY_TOKEN }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
@@ -529,8 +566,11 @@ jobs:
           fi
 
       # Attach the shared function to THIS environment's CloudFront.
+      # Also runs when the origin-verify secret was only just created, so a brand-new
+      # environment always gets a pass that applies it (otherwise the API WAF would
+      # stay fail-closed on a branch that has no shared auth-edge ARN to attach yet).
       - name: Deploy CloudFormation — attach shared auth-edge to CloudFront
-        if: env.AUTH_EDGE_ATTACH == 'true'
+        if: env.AUTH_EDGE_ATTACH == 'true' || env.ORIGIN_SECRET_NEW == 'true'
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
           name: ${{ env.STACK_NAME }}
@@ -550,7 +590,8 @@ jobs:
             GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
             GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
             AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }},
-            AuthEdgeVersionArn=${{ env.AUTH_EDGE_VERSION_ARN }}
+            AuthEdgeVersionArn=${{ env.AUTH_EDGE_VERSION_ARN }},
+            OriginVerifySecret=${{ env.ORIGIN_VERIFY_TOKEN }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
@@ -564,9 +605,12 @@ jobs:
 
       - name: Resolve API endpoint
         run: |
+          # The app now calls the API through CloudFront on its own domain
+          # (/team-members), because the direct API Gateway URL is locked by the WAF.
+          # API_URL below is only the direct endpoint, kept for the deploy summary.
           API_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "API_URL=$API_URL" >> $GITHUB_ENV
-          echo "VITE_API_URL=$API_URL" >> .env.production
+          echo "VITE_API_URL=/team-members" >> .env.production
 
       - name: Build website
         run: npm run build
