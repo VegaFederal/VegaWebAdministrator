@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Regional WAF for the Team Members REST API. Enforces that every request carries
+  the X-Origin-Verify secret injected by CloudFront (so the API can only be reached
+  through CloudFront), plus the same three protections used on the CloudFront WAF.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: The deployment environment
+
+  OriginVerifySecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      Plaintext X-Origin-Verify token (resolved from Secrets Manager in CI).
+      When empty the ACL FAILS CLOSED and blocks all traffic, so the API is never
+      exposed without the origin check.
+
+Conditions:
+  HasOriginVerifySecret: !Not [!Equals [!Ref OriginVerifySecret, ""]]
+
+Resources:
+  ApiWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub "${AWS::StackName}-ApiWebACL"
+      Scope: REGIONAL
+      # Fail closed: with no secret configured, block everything by default.
+      DefaultAction: !If
+        - HasOriginVerifySecret
+        - Allow: {}
+        - Block: {}
+      Rules:
+        # Priority 0: block any request whose X-Origin-Verify header is missing or
+        # does not exactly match the secret. This is what makes a direct call to the
+        # API Gateway URL return 403 while the same call via CloudFront succeeds.
+        # (API Gateway resource policies cannot match arbitrary request headers, so
+        # a WAF rule enforces the origin secret instead.)
+        - !If
+          - HasOriginVerifySecret
+          - Name: RequireOriginVerifyHeader
+            Priority: 0
+            Action:
+              Block: {}
+            Statement:
+              NotStatement:
+                Statement:
+                  ByteMatchStatement:
+                    FieldToMatch:
+                      SingleHeader:
+                        Name: x-origin-verify
+                    PositionalConstraint: EXACTLY
+                    SearchString: !Ref OriginVerifySecret
+                    TextTransformations:
+                      - Priority: 0
+                        Type: NONE
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: ApiOriginVerifyMetric
+          - !Ref AWS::NoValue
+
+        - Name: AWSManagedRulesCommonRuleSet
+          Priority: 1
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: ApiCommonRuleSetMetric
+
+        - Name: AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: ApiKnownBadInputsMetric
+
+        # Throttle any direct traffic that slips through to the API.
+        - Name: RateLimitRule
+          Priority: 3
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 2000
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: ApiRateLimitMetric
+
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub "${AWS::StackName}-ApiWebACL"
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  ApiWafWebAclArn:
+    Description: ARN of the regional WAF web ACL for the API
+    Value: !GetAtt ApiWebACL.Arn
