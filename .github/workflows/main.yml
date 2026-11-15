@@ -321,9 +321,8 @@ jobs:
 
       # Origin-verify secret (CloudFront -> API WAF)
       # The secret is CREATED by the stack (secrets.yaml), but its plaintext value must
-      # be passed back in as a parameter. If the stack already exists we read it now so
-      # pass 1 keeps the API locked; on the very first deploy it doesn't exist yet, the
-      # token is empty, the API WAF fails closed, and a later pass applies the value.
+      # be passed back in as a parameter. Read it now if it exsits pass 1 keeps the API locked. 
+      # On the very first deploy it doesn't exist yet, the token is empty, the API WAF fails closed.
       - name: Resolve origin-verify secret (if it already exists)
         run: |
           TOKEN=$(aws secretsmanager get-secret-value \
@@ -363,8 +362,6 @@ jobs:
           capabilities: "CAPABILITY_NAMED_IAM"
 
       #  Resolve CloudFront domain 
-      # Now the stack has certainly created the secret: read its value for every
-      # later pass (idempotent when it was already resolved before pass 1).
       - name: Resolve origin-verify secret (created by the stack)
         run: |
           TOKEN=$(aws secretsmanager get-secret-value \
@@ -566,9 +563,6 @@ jobs:
           fi
 
       # Attach the shared function to THIS environment's CloudFront.
-      # Also runs when the origin-verify secret was only just created, so a brand-new
-      # environment always gets a pass that applies it (otherwise the API WAF would
-      # stay fail-closed on a branch that has no shared auth-edge ARN to attach yet).
       - name: Deploy CloudFormation — attach shared auth-edge to CloudFront
         if: env.AUTH_EDGE_ATTACH == 'true' || env.ORIGIN_SECRET_NEW == 'true'
         uses: aws-actions/aws-cloudformation-github-deploy@v1
