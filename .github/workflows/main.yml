@@ -692,6 +692,16 @@ jobs:
           echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
           echo "DB_ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
 
+          # The frontend calls the API through CloudFront on its own domain, so the
+          # direct API Gateway URL is never used by the browser.
+          echo "VITE_API_URL=/team-members" >> $GITHUB_ENV
+
+          # Cognito callback/logout URL.
+          if [ -n "$DOMAIN_NAME" ]; then
+            echo "CALLBACK_URL=https://${DOMAIN_NAME}/callback" >> $GITHUB_ENV
+            echo "LOGOUT_URL=https://${DOMAIN_NAME}/" >> $GITHUB_ENV
+          fi
+
       - name: Resolve shared database from vegaWebAdmin
         run: |
           DB_STACK_NAME="vega-database-${{ env.DB_ENVIRONMENT }}"
@@ -782,7 +792,9 @@ jobs:
             AllowedGoogleDomain=,
             AllowedGroupEmail=${{ env.ALLOWED_GROUP_EMAIL }},
             CertificateArn=${{ env.CERTIFICATE_ARN }},
-            CreateHostedZone=${{ env.CREATE_HOSTED_ZONE }}
+            CreateHostedZone=${{ env.CREATE_HOSTED_ZONE }},
+            CallbackUrl=${{ env.CALLBACK_URL }},
+            LogoutUrl=${{ env.LOGOUT_URL }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
@@ -796,9 +808,10 @@ jobs:
 
       - name: Resolve API endpoint
         run: |
+          # API_URL is the direct endpoint, kept only for the deploy summary.
           API_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "API_URL=$API_URL" >> $GITHUB_ENV
-          echo "VITE_API_URL=$API_URL" >> .env.production
+          echo "VITE_API_URL=${{ env.VITE_API_URL }}" >> .env.production
 
       - name: Build website
         run: npm run build
