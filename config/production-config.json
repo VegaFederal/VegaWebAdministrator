@@ -1,0 +1,10 @@
+{
+  "projectName": "VegaWebAdministrator",
+  "vpcId": "vpc-03de7ad5a4c7c1822",
+  "aiModel": "",
+  "domainName": "",
+  "wwwDomain": "",
+  "certificateArn": "",
+  "allowedGroupEmail": "",
+  "createHostedZone": "false"
+}

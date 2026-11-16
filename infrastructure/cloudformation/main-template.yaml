@@ -74,6 +74,13 @@ Parameters:
     NoEcho: true
     Description: Google OAuth client secret (read from GitHub Actions secret in CI)
 
+  AllowedGoogleDomain:
+    Type: String
+    Default: ""
+    Description: >
+      Google Workspace domain allowed to sign in. Empty on production;
+      the Google OAuth client enforces the domain there.
+
   AllowedGroupEmail:
     Type: String
     Default: ""

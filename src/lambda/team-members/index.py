@@ -4,6 +4,9 @@ import os
 import base64
 import uuid
 from decimal import Decimal
+import logging
+
+logging.basicConfig (level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['TABLE_NAME'])
@@ -181,6 +184,8 @@ def update_team_member(event):
     if 'image' in body:
         try:
             new_image_key, new_image_url = upload_image_data_url(body['image'])
+            logging.info("update team member, return status code 400")
+
         except ValueError as exc:
             return {
                 "statusCode": 400,
