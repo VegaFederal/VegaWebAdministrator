@@ -74,15 +74,6 @@ Parameters:
     NoEcho: true
     Description: Google OAuth client secret (read from GitHub Actions secret in CI)
 
-  OriginVerifySecret:
-    Type: String
-    Default: ""
-    NoEcho: true
-    Description: >
-      Token from Secrets Manager secret /${Environment}/origin-verify.
-      The deploy job reads it after the secret exists and passes it here.
-      Empty on the deploy that first creates the secret.
-
   AllowedGoogleDomain:
     Type: String
     Default: ""
@@ -181,18 +172,6 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
-  # Regional WAF for the API. The team-members API is an HTTP API, which
-  # cannot be associated with a WebACL, so this stack only creates the ACL.
-  WafApiStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/waf-api.yaml
-      Parameters:
-        Environment: !Ref Environment
-      Tags:
-        - Key: Environment
-          Value: !Ref Environment
-
   AuthEdgeStack:
     Type: AWS::CloudFormation::Stack
     Condition: DeployAuthEdge
@@ -284,10 +263,6 @@ Outputs:
   ApiEndpoint:
     Description: Team Members API endpoint URL
     Value: !GetAtt ApiLambdaStack.Outputs.ApiEndpoint
-
-  WebAclArn:
-    Description: ARN of the regional API WebACL
-    Value: !GetAtt WafApiStack.Outputs.WebAclArn
 
   OriginVerifySecretArn:
     Description: ARN of the auto-generated origin-verify secret
