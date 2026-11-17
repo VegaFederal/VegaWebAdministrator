@@ -159,7 +159,7 @@ def delete_team_member(event):
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
             "body": json.dumps({"error": "ID is required"})
         }
-
+  
     item = table.get_item(Key={'id': member_id}).get('Item')
     if not item:
         return {
