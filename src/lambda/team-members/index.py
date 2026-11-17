@@ -128,7 +128,7 @@ def delete_team_member(event):
     path_params = event.get('pathParameters') or {}
     member_id = path_params.get('id')
     if not member_id:
-        logger.info("delete team member, return status code 400")
+        logger.info("deleted team member, return status code 400")
         return {
             "statusCode": 400,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
@@ -161,7 +161,7 @@ def update_team_member(event):
     path_params = event.get('pathParameters') or {}
     member_id = path_params.get('id')
     if not member_id:
-        logger.info("update team member, return status code 400")
+        logger.info("updated team member, return status code 400")
         return {
             "statusCode": 400,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
@@ -260,7 +260,7 @@ def create_team_member(event):
         'image': image_url,
     }
     table.put_item(Item=item)
-
+    logger.info("created a team memmber, status code 201")
     return {
         "statusCode": 201,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
@@ -284,7 +284,7 @@ def update_card_order(event):
                 ':order': card_order['memberOrder']
             }
         )
-    logger.info("update card order, return status code 200")
+    logger.info("updated card order, return status code 200")
     return {
         "statusCode": 200,
         "headers": {
