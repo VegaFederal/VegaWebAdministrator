@@ -12,7 +12,6 @@ dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['TABLE_NAME'])
 s3 = boto3.client('s3')
 BUCKET_NAME = os.environ.get('BUCKET_NAME', '')
-ALLOWED_ORIGIN = os.environ.get('ALLOWED_ORIGIN', '')
 VETERAN_LOGO_URLS = {
     'US_Army': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Army.png',
     'US_Navy': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Navy.png',
@@ -65,12 +64,6 @@ def upload_image_data_url(data_url):
     return key, f"https://{BUCKET_NAME}.s3.amazonaws.com/{key}"
 
 
-def _normalize_headers(event):
-    # REST API (payload v1) keeps the caller's header casing and may send null;
-    # HTTP API (payload v2) lowercases. Normalize so lookups work for both.
-    return {str(k).lower(): v for k, v in (event.get('headers') or {}).items()}
-
-
 def _http_method(event):
     http = (event.get('requestContext') or {}).get('http')
     if http and http.get('method'):
@@ -88,17 +81,6 @@ def _route_key(event):
 
 
 def handler(event, context):
-    headers = _normalize_headers(event)
-    origin = headers.get('origin', '')
-    referer = headers.get('referer', '')
-
-    if ALLOWED_ORIGIN and origin != ALLOWED_ORIGIN and not referer.startswith(ALLOWED_ORIGIN):
-        return {
-            "statusCode": 401,
-            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
-            "body": json.dumps({"error": "Forbidden"})
-        }
-
     method = _http_method(event)
     route_key = _route_key(event)
 
@@ -116,22 +98,19 @@ def handler(event, context):
                 return update_team_member(event)
             return {
                 "statusCode": 404,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*"
-                },
+                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": "Unknown PUT route"})
             }
         else:
             return {
                 "statusCode": 405,
-                "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": "Method not allowed"})
             }
     except Exception as e:
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": str(e)})
         }
 
@@ -141,7 +120,7 @@ def get_team_members():
     members = sorted(response['Items'], key=lambda x: x.get('memberOrder', 0))
     return {
         "statusCode": 200,
-        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+        "headers": {"Content-Type": "application/json"},
         "body": json.dumps([team_member_for_response(member) for member in members])
     }
 
@@ -152,7 +131,7 @@ def delete_team_member(event):
     if not member_id:
         return {
             "statusCode": 400,
-            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "ID is required"})
         }
 
@@ -160,7 +139,7 @@ def delete_team_member(event):
     if not item:
         return {
             "statusCode": 404,
-            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "Team member not found"})
         }
 
@@ -173,7 +152,7 @@ def delete_team_member(event):
     table.delete_item(Key={'id': member_id})
     return {
         "statusCode": 200,
-        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+        "headers": {"Content-Type": "application/json"},
         "body": json.dumps({"message": "Team member deleted"})
     }
 
@@ -184,7 +163,7 @@ def update_team_member(event):
     if not member_id:
         return {
             "statusCode": 400,
-            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "ID is required"})
         }
 
@@ -192,7 +171,7 @@ def update_team_member(event):
     if not existing:
         return {
             "statusCode": 404,
-            "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+            "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "Team member not found"})
         }
 
@@ -211,7 +190,7 @@ def update_team_member(event):
         except ValueError as exc:
             return {
                 "statusCode": 400,
-                "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": str(exc)})
             }
 
@@ -253,7 +232,7 @@ def update_team_member(event):
 
     return {
         "statusCode": 200,
-        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+        "headers": {"Content-Type": "application/json"},
         "body": json.dumps(team_member_for_response(item))
     }
 
@@ -284,7 +263,7 @@ def create_team_member(event):
 
     return {
         "statusCode": 201,
-        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+        "headers": {"Content-Type": "application/json"},
         "body": json.dumps(team_member_for_response(item))
     }
 
@@ -308,10 +287,7 @@ def update_card_order(event):
 
     return {
         "statusCode": 200,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-        },
+        "headers": {"Content-Type": "application/json"},
         "body": json.dumps({
             "message": "Card order updated"
         })

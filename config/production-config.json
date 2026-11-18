@@ -1,10 +1,13 @@
 {
   "projectName": "VegaWebAdministrator",
-  "vpcId": "vpc-03de7ad5a4c7c1822",
-  "aiModel": "",
-  "domainName": "",
+  "description": "Production configuration file for Vega Administration page.",
+  "awsAccountId": "423153317214",
+  "vpcId": "vpc-03d0b258d48f85428",
+  "subnetIds": "subnet-0bfc75f544486f0c4",
+  "domainName": "admin.vegafederal.com",
   "wwwDomain": "",
-  "certificateArn": "",
-  "allowedGroupEmail": "",
-  "createHostedZone": "false"
+  "certificateArn": "arn:aws:acm:us-east-1:423153317214:certificate/b1f2aefd-112a-4dd8-b241-ccbae90c471e",
+  "allowedGroupEmail": "vega_web_admin_group@vegafederal.com",
+  "createHostedZone": "false",
+  "environment": "production"
 }
