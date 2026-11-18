@@ -9,6 +9,7 @@ Parameters:
   
   VpcId:
     Type: String
+    Default: ""
     Description: ID of the existing company VPC
 
   TemplateBucket:
@@ -17,6 +18,7 @@ Parameters:
 
   SubnetIds:
     Type: String
+    Default: ""
     Description: Comma-delimited list of subnet IDs for deployment
 
   DomainName:
@@ -55,11 +57,6 @@ Parameters:
   AssetsBucketName:
     Type: String
     Description: Shared assets S3 bucket name
-
-  AllowedOrigin:
-    Type: String
-    Default: ""
-    Description: Allowed site origin for Lambda (e.g. https://d123.cloudfront.net or https://vegafederal.com)
 
   # Cognito / Google SSO 
   GoogleOAuthClientId:
@@ -124,20 +121,29 @@ Parameters:
       Plaintext X-Origin-Verify token from Secrets Manager (/<env>/origin-verify).
       Injected by CloudFront and enforced by the regional API WAF.
 
+  # Dev shares one Cognito pool and one login function (owned by the main branch).
+  # Production lives in a separate AWS account and cannot read those, so it owns its
+  # own. The production pipeline sets this to "true".
+  OwnsAuthResources:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Create Cognito and the auth-edge function for production.
+
 Conditions:
   HasVpcConfig: !Not [!Equals [!Ref VpcId, '']]
   # Cognito is only deployed on the main branch — all other branches share it
   HasCognitoConfig: !Not [!Equals [!Ref CallbackUrl, '']]
   IsMainBranch: !Equals [!Ref Environment, 'main']
+  OwnsAuth: !Or
+    - !Condition IsMainBranch
+    - !Equals [!Ref OwnsAuthResources, 'true']
   DeployCognito: !And
     - !Condition HasCognitoConfig
-    - !Condition IsMainBranch
-  # The auth-edge function is a SHARED resource: created only on main, and only
-  # once its packaged ZIP key is known. Branches never create it — they read the
-  # published version ARN from SSM and attach it to their own CloudFront.
+    - !Condition OwnsAuth
   DeployAuthEdge: !And
     - !Not [!Equals [!Ref AuthEdgeS3Key, '']]
-    - !Condition IsMainBranch
+    - !Condition OwnsAuth
   # CloudFront attaches the auth-edge trigger whenever a version ARN is supplied
   # (on main from the AuthEdgeStack output, on branches from SSM via CI).
   HasAuthEdgeVersion: !Not [!Equals [!Ref AuthEdgeVersionArn, '']]
@@ -169,6 +175,7 @@ Resources:
   # Security Groups Stack
   SecurityGroupsStack:
     Type: AWS::CloudFormation::Stack
+    Condition: HasVpcConfig
     Properties:
       TemplateURL: !Sub https://s3.${AWS::Region}.amazonaws.com/${TemplateBucket}/templates/security-groups.yaml
       Parameters:
@@ -189,7 +196,6 @@ Resources:
         TableName: !Ref TableName
         TableArn: !Ref TableArn
         AssetsBucketName: !Ref AssetsBucketName
-        AllowedOrigin: !Ref AllowedOrigin
         ApiWafWebAclArn: !GetAtt WafApiStack.Outputs.ApiWafWebAclArn
       Tags:
         - Key: Environment
