@@ -7,8 +7,6 @@ import logging
 from decimal import Decimal
 import logging
 
-logging.basicConfig (level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-
 logger = logging.getLogger()
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['TABLE_NAME'])
@@ -29,7 +27,6 @@ def decimal_to_native(obj):
         return {k: decimal_to_native(v) for k, v in obj.items()}
     if isinstance(obj, Decimal):
         return int(obj) if obj % 1 == 0 else float(obj)
-    print ("decimal to native")
     return obj
 
 
