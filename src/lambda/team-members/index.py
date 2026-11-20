@@ -150,7 +150,6 @@ def delete_team_member(event):
     path_params = event.get('pathParameters') or {}
     member_id = path_params.get('id')
     if not member_id:
-        logger.info("deleted team member, return status code 400")
         return {
             "statusCode": 400,
             "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
@@ -172,6 +171,7 @@ def delete_team_member(event):
             s3.delete_object(Bucket=BUCKET_NAME, Key=key)
 
     table.delete_item(Key={'id': member_id})
+    logger.info("deleted team member, return status code 200")
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
