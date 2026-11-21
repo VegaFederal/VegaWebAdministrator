@@ -338,9 +338,73 @@ jobs:
             echo "ORIGIN_SECRET_NEW=true" >> $GITHUB_ENV
           fi
 
-      #  Pass 1: deploy infrastructure without Cognito.
-      #    CallbackUrl is empty so DeployCognito condition is false — Cognito skipped.
-      #    CloudFront is created here and its domain is read after this step.
+      # Validated OAuth first every pass can carry the values.  If we do a pass without them, Cognito will reset
+      # which we don't want.
+      - name: Validate Google OAuth credentials
+        if: env.IS_MAIN_BRANCH == 'true'
+        env:
+          G_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          G_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+        run: |
+          if [ -z "$G_CLIENT_ID" ] || [ -z "$G_CLIENT_SECRET" ]; then
+            echo "ERROR: GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET GitHub Actions secrets are not set."
+            exit 1
+          fi
+          echo "::add-mask::$G_CLIENT_SECRET"
+          echo "GOOGLE_CLIENT_ID=$G_CLIENT_ID" >> $GITHUB_ENV
+          echo "GOOGLE_CLIENT_SECRET=$G_CLIENT_SECRET" >> $GITHUB_ENV
+
+      # If Parameters are left out of a pass they revert to the template defaults. 
+      # On a brand-new environment none of them exist yet and they stay empty.
+      - name: Read existing environment state (for pass 1)
+        run: |
+          CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name "${{ env.STACK_NAME }}" \
+            --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" --output text 2>/dev/null || echo "")
+          if [ -n "$CF_DOMAIN" ] && [ "$CF_DOMAIN" != "None" ]; then
+            echo "Existing environment found: $CF_DOMAIN"
+            echo "CALLBACK_URL=https://${CF_DOMAIN}/callback" >> $GITHUB_ENV
+            echo "LOGOUT_URL=https://${CF_DOMAIN}/" >> $GITHUB_ENV
+          else
+            echo "New environment: no existing state to carry."
+          fi
+
+          # Latest shared login-function version (published by main).
+          AUTH_EDGE_VERSION_ARN=$(aws ssm get-parameter \
+            --name "/vegawebadmin/shared/authedge/VersionArn" \
+            --query "Parameter.No, Value" --output text 2>/dev/null || echo "")
+          echo "AUTH_EDGE_VERSION_ARN=$AUTH_EDGE_VERSION_ARN" >> $GITHUB_ENV
+
+      # Main branch template bucket is new on every run, so when the shared login
+      # function already exists it is re-packaged into this run's bucket first.
+      - name: Package shared auth-edge before pass 1 (main only, if Cognito exists)
+        if: env.IS_MAIN_BRANCH == 'true'
+        run: |
+          get_param() {
+            aws ssm get-parameter --name "/vegawebadmin/shared/cognito/$1" \
+              --query "Parameter.Value" --output text 2>/dev/null || echo ""
+          }
+          USER_POOL_ID=$(get_param UserPoolId)
+          APP_CLIENT_ID=$(get_param AppClientId)
+          COGNITO_DOMAIN=$(get_param HostedUIDomain)
+
+          if [ -z "$USER_POOL_ID" ] || [ -z "$APP_CLIENT_ID" ] || [ -z "$COGNITO_DOMAIN" ]; then
+            echo "Shared Cognito does not exist yet (first main deploy): auth-edge is packaged after Cognito is created."
+            echo "AUTH_EDGE_S3_KEY=" >> $GITHUB_ENV
+            exit 0
+          fi
+
+          OUTPUT=$(USER_POOL_ID="$USER_POOL_ID" \
+            APP_CLIENT_ID="$APP_CLIENT_ID" \
+            COGNITO_DOMAIN="$COGNITO_DOMAIN" \
+            AWS_REGION="${{ secrets.AWS_REGION || 'us-east-1' }}" \
+            DEPLOYMENT_BUCKET="${{ env.TEMPLATE_BUCKET }}" \
+            TEMPLATE_BUCKET="${{ env.TEMPLATE_BUCKET }}" \
+            ENVIRONMENT="${{ env.ENVIRONMENT }}" \
+            bash scripts/package-auth-edge.sh)
+          echo "$OUTPUT"
+          KEY=$(echo "$OUTPUT" | grep '^AUTH_EDGE_S3_KEY=' | cut -d= -f2-)
+          echo "AUTH_EDGE_S3_KEY=$KEY" >> $GITHUB_ENV
+
       - name: Deploy CloudFormation stack — pass 1
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
@@ -355,8 +419,13 @@ jobs:
             TableName=${{ env.DB_TABLE_NAME }},
             TableArn=${{ env.DB_TABLE_ARN }},
             AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
-            CallbackUrl=,
-            LogoutUrl=,
+            CallbackUrl=${{ env.CALLBACK_URL }},
+            LogoutUrl=${{ env.LOGOUT_URL }},
+            AllowedGroupEmail=,
+            GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
+            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
+            AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }},
+            AuthEdgeVersionArn=${{ env.AUTH_EDGE_VERSION_ARN }},
             OriginVerifySecret=${{ env.ORIGIN_VERIFY_TOKEN }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
@@ -385,17 +454,6 @@ jobs:
           echo "LOGOUT_URL=https://${CF_DOMAIN}/" >> $GITHUB_ENV
 
       #  MAIN BRANCH ONLY: validate credentials and deploy Cognito 
-      - name: Validate Google OAuth credentials
-        if: env.IS_MAIN_BRANCH == 'true'
-        run: |
-          if [ -z "${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" ]; then
-            echo "ERROR: GOOGLE_OAUTH_CLIENT_ID GitHub Actions secret is not set."
-            exit 1
-          fi
-          echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" >> $GITHUB_ENV
-          echo "::add-mask::${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}"
-          echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" >> $GITHUB_ENV
-
       - name: Deploy CloudFormation stack — pass 2 (main branch — creates Cognito)
         if: env.IS_MAIN_BRANCH == 'true'
         uses: aws-actions/aws-cloudformation-github-deploy@v1
@@ -416,6 +474,8 @@ jobs:
             AllowedGroupEmail=,
             GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
             GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
+            AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }},
+            AuthEdgeVersionArn=${{ env.AUTH_EDGE_VERSION_ARN }},
             OriginVerifySecret=${{ env.ORIGIN_VERIFY_TOKEN }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
@@ -541,6 +601,7 @@ jobs:
             GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
             GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
             AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }},
+            AuthEdgeVersionArn=${{ env.AUTH_EDGE_VERSION_ARN }},
             OriginVerifySecret=${{ env.ORIGIN_VERIFY_TOKEN }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
@@ -667,7 +728,8 @@ jobs:
           CONFIG_FILE="config/production-config.json"
           PROJECT_NAME=$(jq -r '.projectName' $CONFIG_FILE)
           VPC_ID=$(jq -r '.vpcId' $CONFIG_FILE)
-          AI_MODEL=$(jq -r '.aiModel' $CONFIG_FILE)
+          SUBNET_IDS=$(jq -r '.subnetIds // ""' $CONFIG_FILE)
+          AWS_ACCOUNT_ID=$(jq -r '.awsAccountId // ""' $CONFIG_FILE)
           DOMAIN_NAME=$(jq -r '.domainName // ""' $CONFIG_FILE)
           WWW_DOMAIN=$(jq -r '.wwwDomain // ""' $CONFIG_FILE)
           CERTIFICATE_ARN=$(jq -r '.certificateArn // ""' $CONFIG_FILE)
@@ -676,12 +738,33 @@ jobs:
 
           echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
           echo "VPC_ID=$VPC_ID" >> $GITHUB_ENV
-          echo "AI_MODEL=$AI_MODEL" >> $GITHUB_ENV
+          echo "SUBNET_IDS=$SUBNET_IDS" >> $GITHUB_ENV
+          echo "AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID" >> $GITHUB_ENV
           echo "DOMAIN_NAME=$DOMAIN_NAME" >> $GITHUB_ENV
           echo "WWW_DOMAIN=$WWW_DOMAIN" >> $GITHUB_ENV
           echo "CERTIFICATE_ARN=$CERTIFICATE_ARN" >> $GITHUB_ENV
           echo "ALLOWED_GROUP_EMAIL=$ALLOWED_GROUP_EMAIL" >> $GITHUB_ENV
           echo "CREATE_HOSTED_ZONE=$CREATE_HOSTED_ZONE" >> $GITHUB_ENV
+
+      #   Verify that production only deploys to the vegafederal account.   
+      - name: Verify production target
+        run: |
+          ACTUAL=$(aws sts get-caller-identity --query Account --output text)
+          if [ -z "$AWS_ACCOUNT_ID" ]; then
+            echo "ERROR: awsAccountId is missing from config/production-config.json."
+            exit 1
+          fi
+          if [ "$ACTUAL" != "$AWS_ACCOUNT_ID" ]; then
+            echo "ERROR: credentials are for account $ACTUAL, but production-config.json expects $AWS_ACCOUNT_ID."
+            exit 1
+          fi
+          for name in DOMAIN_NAME CERTIFICATE_ARN; do
+            if [ -z "${!name}" ]; then
+              echo "ERROR: $name is missing from config/production-config.json."
+              exit 1
+            fi
+          done
+          echo "Deploying to production account $ACTUAL"
 
       - name: Set production environment variables
         run: |
@@ -774,7 +857,70 @@ jobs:
           aws s3 cp index.zip s3://$TEMPLATE_BUCKET/$ENVIRONMENT/lambda/group-check/index.zip
           rm -rf package index.zip
 
-      - name: Deploy CloudFormation stack
+      # Production Google OAuth client
+      - name: Validate production Google OAuth credentials
+        env:
+          G_CLIENT_ID: ${{ secrets.PROD_GOOGLE_OAUTH_CLIENT_ID }}
+          G_CLIENT_SECRET: ${{ secrets.PROD_GOOGLE_OAUTH_CLIENT_SECRET }}
+        run: |
+          if [ -z "$G_CLIENT_ID" ] || [ -z "$G_CLIENT_SECRET" ]; then
+            echo "ERROR: PROD_GOOGLE_OAUTH_CLIENT_ID / PROD_GOOGLE_OAUTH_CLIENT_SECRET are not set on the production environment."
+            exit 1
+          fi
+          echo "::add-mask::$G_CLIENT_SECRET"
+          echo "GOOGLE_CLIENT_ID=$G_CLIENT_ID" >> $GITHUB_ENV
+          echo "GOOGLE_CLIENT_SECRET=$G_CLIENT_SECRET" >> $GITHUB_ENV
+
+      # Origin-verify secret (CloudFront -> regional API WAF)
+      # Created by the stack; its value must be passed on EVERY deploy.
+      # Pass 1 (the API WAF fails closed) and pass 2 applies it.
+      - name: Resolve origin-verify secret (if it already exists)
+        run: |
+          TOKEN=$(aws secretsmanager get-secret-value \
+            --secret-id "/${{ env.ENVIRONMENT }}/origin-verify" \
+            --query SecretString --output text 2>/dev/null | jq -r '.token // empty' 2>/dev/null || echo "")
+          if [ -n "$TOKEN" ]; then
+            echo "::add-mask::$TOKEN"
+            echo "ORIGIN_VERIFY_TOKEN=$TOKEN" >> $GITHUB_ENV
+            echo "ORIGIN_SECRET_NEW=false" >> $GITHUB_ENV
+          else
+            echo "Origin-verify secret does not exist yet (first production deploy)."
+            echo "ORIGIN_VERIFY_TOKEN=" >> $GITHUB_ENV
+            echo "ORIGIN_SECRET_NEW=true" >> $GITHUB_ENV
+          fi
+
+      # Production Auth Edge Lambda connecting to Cognito.
+      - name: Package auth-edge (if production Cognito already exists)
+        run: |
+          get_output() {
+            aws cloudformation describe-stacks --stack-name "${{ env.STACK_NAME }}" \
+              --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text 2>/dev/null || echo ""
+          }
+          USER_POOL_ID=$(get_output UserPoolId)
+          APP_CLIENT_ID=$(get_output AppClientId)
+          COGNITO_DOMAIN=$(get_output CognitoHostedUIDomain)
+
+          for value in "$USER_POOL_ID" "$APP_CLIENT_ID" "$COGNITO_DOMAIN"; do
+            if [ -z "$value" ] || [ "$value" = "None" ]; then
+              echo "No existing production Cognito outputs (first deploy) - auth-edge is packaged after pass 1."
+              echo "AUTH_EDGE_S3_KEY=" >> $GITHUB_ENV
+              exit 0
+            fi
+          done
+
+          OUTPUT=$(USER_POOL_ID="$USER_POOL_ID" \
+            APP_CLIENT_ID="$APP_CLIENT_ID" \
+            COGNITO_DOMAIN="$COGNITO_DOMAIN" \
+            AWS_REGION="${{ secrets.PROD_AWS_REGION || 'us-east-1' }}" \
+            DEPLOYMENT_BUCKET="${{ env.TEMPLATE_BUCKET }}" \
+            TEMPLATE_BUCKET="${{ env.TEMPLATE_BUCKET }}" \
+            ENVIRONMENT="${{ env.ENVIRONMENT }}" \
+            bash scripts/package-auth-edge.sh)
+          echo "$OUTPUT"
+          KEY=$(echo "$OUTPUT" | grep '^AUTH_EDGE_S3_KEY=' | cut -d= -f2-)
+          echo "AUTH_EDGE_S3_KEY=$KEY" >> $GITHUB_ENV
+
+      - name: Deploy CloudFormation stack — pass 1
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
           name: ${{ env.STACK_NAME }}
@@ -782,6 +928,7 @@ jobs:
           parameter-overrides: >-
             Environment=${{ env.ENVIRONMENT }},
             VpcId=${{ env.VPC_ID }},
+            SubnetIds=${{ env.SUBNET_IDS }},
             TemplateBucket=${{ env.TEMPLATE_BUCKET }},
             DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
             TableName=${{ env.DB_TABLE_NAME }},
@@ -789,12 +936,95 @@ jobs:
             AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
             DomainName=${{ env.DOMAIN_NAME }},
             WwwDomain=${{ env.WWW_DOMAIN }},
-            AllowedGoogleDomain=,
-            AllowedGroupEmail=${{ env.ALLOWED_GROUP_EMAIL }},
             CertificateArn=${{ env.CERTIFICATE_ARN }},
             CreateHostedZone=${{ env.CREATE_HOSTED_ZONE }},
             CallbackUrl=${{ env.CALLBACK_URL }},
-            LogoutUrl=${{ env.LOGOUT_URL }}
+            LogoutUrl=${{ env.LOGOUT_URL }},
+            AllowedGroupEmail=${{ env.ALLOWED_GROUP_EMAIL }},
+            GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
+            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
+            OwnsAuthResources=true,
+            AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }},
+            OriginVerifySecret=${{ env.ORIGIN_VERIFY_TOKEN }}
+          no-fail-on-empty-changeset: "1"
+          capabilities: "CAPABILITY_NAMED_IAM"
+
+      # Read the secret and apply it.
+      - name: Resolve origin-verify secret and decide whether pass 2 is needed
+        run: |
+          TOKEN=$(aws secretsmanager get-secret-value \
+            --secret-id "/${{ env.ENVIRONMENT }}/origin-verify" \
+            --query SecretString --output text | jq -r '.token // empty')
+          if [ -z "$TOKEN" ]; then
+            echo "ERROR: /${{ env.ENVIRONMENT }}/origin-verify has no token after pass 1."
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          echo "ORIGIN_VERIFY_TOKEN=$TOKEN" >> $GITHUB_ENV
+
+          if [ -z "${{ env.AUTH_EDGE_S3_KEY }}" ] || [ "${{ env.ORIGIN_SECRET_NEW }}" = "true" ]; then
+            echo "NEEDS_PASS2=true" >> $GITHUB_ENV
+          else
+            echo "NEEDS_PASS2=false" >> $GITHUB_ENV
+          fi
+
+      - name: Package auth-edge (first production deploy)
+        if: env.NEEDS_PASS2 == 'true' && env.AUTH_EDGE_S3_KEY == ''
+        run: |
+          get_output() {
+            aws cloudformation describe-stacks --stack-name "${{ env.STACK_NAME }}" \
+              --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text
+          }
+          USER_POOL_ID=$(get_output UserPoolId)
+          APP_CLIENT_ID=$(get_output AppClientId)
+          COGNITO_DOMAIN=$(get_output CognitoHostedUIDomain)
+
+          for value in "$USER_POOL_ID" "$APP_CLIENT_ID" "$COGNITO_DOMAIN"; do
+            if [ -z "$value" ] || [ "$value" = "None" ]; then
+              echo "ERROR: production Cognito outputs are missing after pass 1."
+              exit 1
+            fi
+          done
+
+          OUTPUT=$(USER_POOL_ID="$USER_POOL_ID" \
+            APP_CLIENT_ID="$APP_CLIENT_ID" \
+            COGNITO_DOMAIN="$COGNITO_DOMAIN" \
+            AWS_REGION="${{ secrets.PROD_AWS_REGION || 'us-east-1' }}" \
+            DEPLOYMENT_BUCKET="${{ env.TEMPLATE_BUCKET }}" \
+            TEMPLATE_BUCKET="${{ env.TEMPLATE_BUCKET }}" \
+            ENVIRONMENT="${{ env.ENVIRONMENT }}" \
+            bash scripts/package-auth-edge.sh)
+          echo "$OUTPUT"
+          KEY=$(echo "$OUTPUT" | grep '^AUTH_EDGE_S3_KEY=' | cut -d= -f2-)
+          echo "AUTH_EDGE_S3_KEY=$KEY" >> $GITHUB_ENV
+
+      - name: Deploy CloudFormation stack — pass 2 (login function + origin secret)
+        if: env.NEEDS_PASS2 == 'true'
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: ${{ env.STACK_NAME }}
+          template: infrastructure/cloudformation/main-template.yaml
+          parameter-overrides: >-
+            Environment=${{ env.ENVIRONMENT }},
+            VpcId=${{ env.VPC_ID }},
+            SubnetIds=${{ env.SUBNET_IDS }},
+            TemplateBucket=${{ env.TEMPLATE_BUCKET }},
+            DeploymentBucket=${{ env.TEMPLATE_BUCKET }},
+            TableName=${{ env.DB_TABLE_NAME }},
+            TableArn=${{ env.DB_TABLE_ARN }},
+            AssetsBucketName=${{ env.ASSETS_BUCKET_NAME }},
+            DomainName=${{ env.DOMAIN_NAME }},
+            WwwDomain=${{ env.WWW_DOMAIN }},
+            CertificateArn=${{ env.CERTIFICATE_ARN }},
+            CreateHostedZone=${{ env.CREATE_HOSTED_ZONE }},
+            CallbackUrl=${{ env.CALLBACK_URL }},
+            LogoutUrl=${{ env.LOGOUT_URL }},
+            AllowedGroupEmail=${{ env.ALLOWED_GROUP_EMAIL }},
+            GoogleOAuthClientId=${{ env.GOOGLE_CLIENT_ID }},
+            GoogleOAuthClientSecret=${{ env.GOOGLE_CLIENT_SECRET }},
+            OwnsAuthResources=true,
+            AuthEdgeS3Key=${{ env.AUTH_EDGE_S3_KEY }},
+            OriginVerifySecret=${{ env.ORIGIN_VERIFY_TOKEN }}
           no-fail-on-empty-changeset: "1"
           capabilities: "CAPABILITY_NAMED_IAM"
 
@@ -826,13 +1056,42 @@ jobs:
           DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue" --output text)
           aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths "/*"
 
-      - name: Get CloudFront URL
+      - name: Print production summary
         run: |
           CF_URL=$(aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --query "Stacks[0].Outputs[?OutputKey=='WebsiteURL'].OutputValue" --output text)
-          echo "Production deployment completed!"
-          echo "Your production website is available at: https://$CF_URL"
-          echo "Team members API: $API_URL"
-          echo "Add CNAME: admin.vegafederal.com → $CF_URL" >> "$GITHUB_STEP_SUMMARY"
+          IDP_URL=$(aws ssm get-parameter --name "/vegawebadmin/shared/cognito/IdpResponseUrl" --query "Parameter.Value" --output text 2>/dev/null || echo "")
+          SA=$(aws secretsmanager get-secret-value --secret-id "/${{ env.ENVIRONMENT }}/google-service-account" --query SecretString --output text 2>/dev/null || echo "")
+
+          echo "Production deployment completed."
+          echo "Site:                  https://${DOMAIN_NAME}"
+          echo "CloudFront domain:     ${CF_URL}"
+          echo "Direct API (WAF-locked): ${API_URL}"
+
+          {
+            echo "## Production deployment complete"
+            echo ""
+            echo "### DNS: create this CNAME (if it does not exist yet)"
+            echo ""
+            echo '```'
+            echo "${DOMAIN_NAME}  CNAME  ${CF_URL}"
+            echo '```'
+            echo ""
+            echo "### Google OAuth client"
+            echo "Confirm this redirect URI is registered on the production OAuth client:"
+            echo ""
+            echo '```'
+            echo "${IDP_URL}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -n "$ALLOWED_GROUP_EMAIL" ] && { [ -z "$SA" ] || echo "$SA" | grep -q "REPLACE_ME"; }; then
+            echo "::warning::/${{ env.ENVIRONMENT }}/google-service-account still has placeholder values. With the group ${ALLOWED_GROUP_EMAIL} enforced, every sign-in is blocked until the service-account JSON is stored there."
+            {
+              echo ""
+              echo "### Action needed"
+              echo "The group check cannot verify membership yet. Store the Google service-account JSON (with an \`admin_email\` field) in \`/${{ env.ENVIRONMENT }}/google-service-account\`. Until then every sign-in is blocked."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
   cleanup:
     if: github.event.inputs.action == 'cleanup'
     runs-on: ubuntu-latest

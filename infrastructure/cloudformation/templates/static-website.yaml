@@ -57,6 +57,8 @@ Conditions:
   HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
   HasWwwDomain: !Not [!Equals [!Ref WwwDomain, ""]]
   ShouldCreateHostedZone: !And [!Condition HasCustomDomain, !Equals [!Ref CreateHostedZone, "true"]]
+  UseCustomDomainCert: !And [!Condition HasCustomDomain, !Condition HasCertificate]
+  ManageWwwDnsRecord: !And [!Condition HasWwwDomain, !Condition ShouldCreateHostedZone]
   HasAuthEdge: !Not [!Equals [!Ref AuthEdgeVersionArn, ""]]
   HasOriginVerifySecret: !Not [!Equals [!Ref OriginVerifySecret, ""]]
 
@@ -119,6 +121,14 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
       DistributionConfig:
+        Aliases: !If
+          - UseCustomDomainCert
+          - !If
+            - HasWwwDomain
+            - - !Ref DomainName
+              - !Ref WwwDomain
+            - - !Ref DomainName
+          - !Ref AWS::NoValue
         Origins:
           - DomainName: !GetAtt WebsiteBucket.RegionalDomainName
             Id: S3Origin
@@ -185,8 +195,12 @@ Resources:
                   IncludeBody: false
               - !Ref AWS::NoValue
         PriceClass: PriceClass_100
-        ViewerCertificate:
-          CloudFrontDefaultCertificate: true
+        ViewerCertificate: !If
+          - UseCustomDomainCert
+          - AcmCertificateArn: !Ref CertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
         CustomErrorResponses:
           - ErrorCode: 403
             ResponseCode: 200
@@ -210,8 +224,6 @@ Resources:
         HeadersConfig:
           HeaderBehavior: whitelist
           Headers:
-            - Origin
-            - Referer
             - Content-Type
             - Accept
 
@@ -321,7 +333,7 @@ Resources:
   # DNS Record for CloudFront (apex domain)
   DNSRecord:
     Type: AWS::Route53::RecordSet
-    Condition: HasCustomDomain
+    Condition: ShouldCreateHostedZone
     Properties:
       HostedZoneName: !Sub "${DomainName}."
       Name: !Ref DomainName
@@ -333,7 +345,7 @@ Resources:
   # DNS Record for www subdomain
   WwwDNSRecord:
     Type: AWS::Route53::RecordSet
-    Condition: HasWwwDomain
+    Condition: ManageWwwDnsRecord
     Properties:
       HostedZoneName: !Sub "${DomainName}."
       Name: !Ref WwwDomain

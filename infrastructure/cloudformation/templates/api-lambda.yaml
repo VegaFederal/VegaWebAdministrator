@@ -18,10 +18,6 @@ Parameters:
   AssetsBucketName: # parameter for the shared assets S3 bucket from the assets.yaml file.
     Type: String
     Description: Shared assets S3 bucket name
-  AllowedOrigin:
-    Type: String
-    Default: ""
-    Description: Allowed site origin (e.g. https://vegafederal.com)
   ApiWafWebAclArn:
     Type: String
     Description: >
@@ -204,7 +200,6 @@ Resources:
           TABLE_NAME: !Ref TableName
           TABLE_ARN: !Ref TableArn
           BUCKET_NAME: !Ref AssetsBucketName
-          ALLOWED_ORIGIN: !Ref AllowedOrigin
       Code:
         S3Bucket: !Ref DeploymentBucket
         S3Key: !Sub ${Environment}/lambda/team-members/index.zip
