@@ -16,6 +16,10 @@ ALLOWED_ORIGIN = os.environ.get('ALLOWED_ORIGIN', '')
 VETERAN_LOGO_URLS = {
     'US_Army': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Army.png',
     'US_Navy': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Navy.png',
+    'US_Marine': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Marine.png',
+    'US_Coastguard': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Coastguard.png',
+    'US_Spaceforce': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Spaceforce.png',
+    'US_Airforce': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Airforce.png',
 }
 VETERAN_LOGO_NAMES = {url: name for name, url in VETERAN_LOGO_URLS.items()}
 
@@ -32,7 +36,7 @@ def decimal_to_native(obj):
 
 
 def veteran_logo_url(value):
-    if value is None:
+    if value is None or value == "":
         return None
     return VETERAN_LOGO_URLS[value]
 

@@ -91,14 +91,17 @@ export function CreateCardModal({
           <select 
             value={draft.veteranLogo ?? ''}
             onChange={(event) => handleUpdate(
-              'veteranLogo',
-              event.target.value === '' ? null : event.target.value
+              'veteranLogo', event.target.value
             )}
             className="mt-1 w-full rounded-md border-2 border-grayscale-700 bg-grayscale-700 px-2 py-1 text-white shadow-lg outline-none"
             >
-            <option value="">None (Null)</option>
+            <option value="">None</option>
             <option value="US_Army">Army</option>
             <option value="US_Navy">Navy</option>
+            <option value="US_Marine">Marine Corps</option>
+            <option value="US_Coastguard">Coast Guard</option>
+            <option value="US_Airforce">Air Force</option>
+            <option value="US_Spaceforce">Space Force</option>
           </select> 
         </label>
 

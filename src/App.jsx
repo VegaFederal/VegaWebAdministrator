@@ -16,7 +16,7 @@ function memberToTask(member) {
     name: member.name ?? "Name",
     title: member.title ?? "Title",
     details: Array.isArray(member.details) ? member.details : (member.details ? [member.details] : ["Questions"]),
-    veteranLogo: member.veteranLogo ?? null,
+    veteranLogo: member.veteranLogo ?? "",
     memberOrder: member.memberOrder ?? 0,
   };
 }
@@ -39,7 +39,7 @@ export default function App() {
       name: "",
       title: "",
       details: ["Questions"],
-      veteranLogo: null,
+      veteranLogo: "",
       memberOrder: "",
   };
   const [draft, setDraft] = useState(emptyDraft);

@@ -41,8 +41,7 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
   const text = task.name ?? "Name";
   const secondText = task.title ?? "Title";
 
-  // NEW: Fallback for veteranLogo selector (null, "vetArmy", or "vetNavy")
-  const veteranLogo = task.veteranLogo ?? null;
+  const veteranLogo = task.veteranLogo ?? "";
 
   // CORE CHANGE: Handle both Array and String types for details
   const thirdTextArray = Array.isArray(task.details) ? task.details : (task.details ? [task.details] : ["Questions"]);
@@ -135,31 +134,6 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
     }
   };
 
-  const handleSaveToJson = (e) => {
-    e.stopPropagation();
-
-    const exportData = {
-      id: task.id,
-      status: task.status ?? "1",
-      image: cardImage,
-      name: text,
-      title: secondText,
-      details: thirdTextArray,
-      veteranLogo: veteranLogo // NEW: Included in the exported JSON file structure
-    };
-
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-      JSON.stringify([exportData], null, 2)
-    )}`;
-
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', jsonString);
-    downloadAnchor.setAttribute('download', `task-card-${task.id}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
-
   return (
     <div ref={connectedCardRef} tabIndex={-1} {...attributes} onClick={handleCardClick} className="relative rounded-lg bg-neutral-700 p-4 shadow-sm hover:shadow-md transition-shadow" style={style}>
       
@@ -203,12 +177,16 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
         <label className="block text-neutral-400 text-xs mb-1 font-semibold">Veteran Status:</label>
         <select 
           value={veteranLogo ?? ""} 
-          onChange={(e) => handleUpdate('veteranLogo', e.target.value === "" ? null : e.target.value)}
+          onChange={(e) => handleUpdate('veteranLogo', e.target.value)}
           className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none"
         >
-          <option value="">None (Null)</option>
+          <option value="">None</option>
           <option value="US_Army">Army</option>
           <option value="US_Navy">Navy</option>
+          <option value="US_Marine">Marine Corps</option>
+          <option value="US_Coastguard">Coast Guard</option>
+          <option value="US_Airforce">Air Force</option>
+          <option value="US_Spaceforce">Space Force</option>
         </select>
       </div>
 
