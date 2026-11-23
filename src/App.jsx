@@ -4,6 +4,7 @@ import { CreateCardModal } from './CreateCardModal.jsx';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal.jsx';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
+import vegaLogo from './assets/Logo.png';
 import React, { useRef } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -385,7 +386,12 @@ export default function App() {
   return (
     <div className="p-4">
       <header className="sticky top-4 z-40 mb-4 rounded-lg border border-neutral-700 bg-black/80 p-3 shadow-lg backdrop-blur">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <img
+            src={vegaLogo}
+            alt="Vega Federal"
+            className="h-10 w-auto max-w-[180px] object-contain"
+          />
           <button onClick={openCardModal} className="cursor-pointer">
             + Add Card
           </button>
