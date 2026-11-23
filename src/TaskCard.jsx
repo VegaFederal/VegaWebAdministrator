@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
 import React, { useState, useRef, useEffect } from 'react';
 
-export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, shouldFocus }) {
+export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, shouldFocus, veteranLogoUrls = {} }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -42,6 +42,7 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
   const secondText = task.title ?? "Title";
 
   const veteranLogo = task.veteranLogo ?? "";
+  const veteranLogoUrl = veteranLogoUrls[task.veteranLogo] ?? "";
 
   // CORE CHANGE: Handle both Array and String types for details
   const thirdTextArray = Array.isArray(task.details) ? task.details : (task.details ? [task.details] : ["Questions"]);
@@ -149,8 +150,11 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
 
       {/* DRAG HANDLE & IMAGE CONTAINER */}
       <div {...listeners} className="cursor-grab flex flex-col items-center mb-4">
-        <div className="rounded-md overflow-hidden border border-neutral-600 mb-2">
+        <div className="relative rounded-md overflow-hidden border border-neutral-600 mb-2">
           <img src={cardImage} alt="Card graphic" className="w-[200px] h-[200px] object-cover pointer-events-none" />
+          {veteranLogoUrl && (
+          <img src={veteranLogoUrl} alt={`${task.veteranLogo} logo`} className="absolute bottom-2 left-2 h-12 w-12 object-contain"/>
+          )}
         </div>
 
         {/* BUTTON BAR FOR ACTION ITEMS */}

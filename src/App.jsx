@@ -421,6 +421,7 @@ export default function App() {
             onCancel={closeCardModal}
             error={formError}
             onSave={addDraft}
+            veteranLogoUrls={veteranLogoUrls}
           />
         )}
         {showDeleteConfirmation && (
@@ -443,6 +444,7 @@ export default function App() {
                 shouldFocus={task.id === focusedTaskId}
                 onSave={saveTask}
                 onSaveUpdate={saveUpdatedTask}
+                veteranLogoUrls={veteranLogoUrls}
               />
             ))}
           </div>
