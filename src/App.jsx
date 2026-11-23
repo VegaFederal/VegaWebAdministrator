@@ -32,6 +32,7 @@ export default function App() {
   const [loadError, setLoadError] = useState(null);
   const [formError, setFormError] = useState('');
   const [focusedTaskId, setFocusedTaskId] = useState(null);
+  const [veteranLogoUrls, setVeteranLogoUrls] = useState({});
 
   const emptyDraft = {
       id: "",
@@ -72,12 +73,20 @@ export default function App() {
       return;
     }
 
-    fetch(API_URL)
-      .then((res) => {
-        if (!res.ok) throw new Error(`API returned ${res.status}`);
-        return res.json();
+    Promise.all([
+      fetch(API_URL),
+      fetch(`${API_URL}/logos`),
+    ])
+      .then(([membersResponse, logosResponse]) => {
+        if (!membersResponse.ok) throw new Error(`Team members API returned ${membersResponse.status}`);
+        if (!logosResponse.ok) throw new Error(`Veteran logos API returned ${logosResponse.status}`);
+        return Promise.all([membersResponse.json(), logosResponse.json()]);
       })
-      .then((members) => {setTasks(members.map(memberToTask)); setCurrentTasks(members.map(memberToTask));})
+      .then(([members, logoUrls]) => {
+        setTasks(members.map(memberToTask));
+        setCurrentTasks(members.map(memberToTask));
+        setVeteranLogoUrls(logoUrls);
+      })
       .catch((err) => setLoadError(err.message))
       .finally(() => setIsLoading(false));
   }, []);

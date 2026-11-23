@@ -108,6 +108,8 @@ def handler(event, context):
 
     try:
         if method == 'GET':
+            if route_key == 'GET /team-members/logos':
+                return get_veteran_logos()
             return get_team_members()
         elif method == 'POST':
             return create_team_member(event)
@@ -147,6 +149,14 @@ def get_team_members():
         "statusCode": 200,
         "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
         "body": json.dumps([team_member_for_response(member) for member in members])
+    }
+
+
+def get_veteran_logos():
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+        "body": json.dumps(VETERAN_LOGO_URLS)
     }
 
 
