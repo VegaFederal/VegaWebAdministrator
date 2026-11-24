@@ -4,6 +4,7 @@ import { CreateCardModal } from './CreateCardModal.jsx';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal.jsx';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { SortableContext, arrayMove, rectSortingStrategy } from '@dnd-kit/sortable';
+import vegaLogo from './assets/Logo.png';
 import React, { useRef } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -16,7 +17,7 @@ function memberToTask(member) {
     name: member.name ?? "Name",
     title: member.title ?? "Title",
     details: Array.isArray(member.details) ? member.details : (member.details ? [member.details] : ["Questions"]),
-    veteranLogo: member.veteranLogo ?? null,
+    veteranLogo: member.veteranLogo ?? "",
     memberOrder: member.memberOrder ?? 0,
   };
 }
@@ -32,6 +33,7 @@ export default function App() {
   const [loadError, setLoadError] = useState(null);
   const [formError, setFormError] = useState('');
   const [focusedTaskId, setFocusedTaskId] = useState(null);
+  const [veteranLogoUrls, setVeteranLogoUrls] = useState({});
 
   const emptyDraft = {
       id: "",
@@ -39,7 +41,7 @@ export default function App() {
       name: "",
       title: "",
       details: ["Questions"],
-      veteranLogo: null,
+      veteranLogo: "",
       memberOrder: "",
   };
   const [draft, setDraft] = useState(emptyDraft);
@@ -72,12 +74,20 @@ export default function App() {
       return;
     }
 
-    fetch(API_URL)
-      .then((res) => {
-        if (!res.ok) throw new Error(`API returned ${res.status}`);
-        return res.json();
+    Promise.all([
+      fetch(API_URL),
+      fetch(`${API_URL}/logos`),
+    ])
+      .then(([membersResponse, logosResponse]) => {
+        if (!membersResponse.ok) throw new Error(`Team members API returned ${membersResponse.status}`);
+        if (!logosResponse.ok) throw new Error(`Veteran logos API returned ${logosResponse.status}`);
+        return Promise.all([membersResponse.json(), logosResponse.json()]);
       })
-      .then((members) => {setTasks(members.map(memberToTask)); setCurrentTasks(members.map(memberToTask));})
+      .then(([members, logoUrls]) => {
+        setTasks(members.map(memberToTask));
+        setCurrentTasks(members.map(memberToTask));
+        setVeteranLogoUrls(logoUrls);
+      })
       .catch((err) => setLoadError(err.message))
       .finally(() => setIsLoading(false));
   }, []);
@@ -376,7 +386,12 @@ export default function App() {
   return (
     <div className="p-4">
       <header className="sticky top-4 z-40 mb-4 rounded-lg border border-neutral-700 bg-black/80 p-3 shadow-lg backdrop-blur">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <img
+            src={vegaLogo}
+            alt="Vega Federal"
+            className="h-10 w-auto max-w-[180px] object-contain"
+          />
           <button onClick={openCardModal} className="cursor-pointer">
             + Add Card
           </button>
@@ -412,6 +427,7 @@ export default function App() {
             onCancel={closeCardModal}
             error={formError}
             onSave={addDraft}
+            veteranLogoUrls={veteranLogoUrls}
           />
         )}
         {showDeleteConfirmation && (
@@ -434,6 +450,7 @@ export default function App() {
                 shouldFocus={task.id === focusedTaskId}
                 onSave={saveTask}
                 onSaveUpdate={saveUpdatedTask}
+                veteranLogoUrls={veteranLogoUrls}
               />
             ))}
           </div>

@@ -15,6 +15,10 @@ BUCKET_NAME = os.environ.get('BUCKET_NAME', '')
 VETERAN_LOGO_URLS = {
     'US_Army': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Army.png',
     'US_Navy': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Navy.png',
+    'US_Marine': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Marine.png',
+    'US_Coastguard': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Coastguard.png',
+    'US_Spaceforce': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Spaceforce.png',
+    'US_Airforce': f'https://{BUCKET_NAME}.s3.amazonaws.com/About_us/US_Airforce.png',
 }
 VETERAN_LOGO_NAMES = {url: name for name, url in VETERAN_LOGO_URLS.items()}
 
@@ -31,7 +35,7 @@ def decimal_to_native(obj):
 
 
 def veteran_logo_url(value):
-    if value is None:
+    if value is None or value == "":
         return None
     return VETERAN_LOGO_URLS[value]
 
@@ -86,6 +90,8 @@ def handler(event, context):
 
     try:
         if method == 'GET':
+            if route_key == 'GET /team-members/logos':
+                return get_veteran_logos()
             return get_team_members()
         elif method == 'POST':
             return create_team_member(event)
@@ -122,6 +128,14 @@ def get_team_members():
         "statusCode": 200,
         "headers": {"Content-Type": "application/json"},
         "body": json.dumps([team_member_for_response(member) for member in members])
+    }
+
+
+def get_veteran_logos():
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"},
+        "body": json.dumps(VETERAN_LOGO_URLS)
     }
 
 

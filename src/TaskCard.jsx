@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import defaultImage from '../src/assets/add_Photo.png'; // Fallback if no custom image is picked
 import React, { useState, useRef, useEffect } from 'react';
 
-export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, shouldFocus }) {
+export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, shouldFocus, veteranLogoUrls = {} }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -41,8 +41,8 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
   const text = task.name ?? "Name";
   const secondText = task.title ?? "Title";
 
-  // NEW: Fallback for veteranLogo selector (null, "vetArmy", or "vetNavy")
-  const veteranLogo = task.veteranLogo ?? null;
+  const veteranLogo = task.veteranLogo ?? "";
+  const veteranLogoUrl = veteranLogoUrls[task.veteranLogo] ?? "";
 
   // CORE CHANGE: Handle both Array and String types for details
   const thirdTextArray = Array.isArray(task.details) ? task.details : (task.details ? [task.details] : ["Questions"]);
@@ -135,31 +135,6 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
     }
   };
 
-  const handleSaveToJson = (e) => {
-    e.stopPropagation();
-
-    const exportData = {
-      id: task.id,
-      status: task.status ?? "1",
-      image: cardImage,
-      name: text,
-      title: secondText,
-      details: thirdTextArray,
-      veteranLogo: veteranLogo // NEW: Included in the exported JSON file structure
-    };
-
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-      JSON.stringify([exportData], null, 2)
-    )}`;
-
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', jsonString);
-    downloadAnchor.setAttribute('download', `task-card-${task.id}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
-
   return (
     <div ref={connectedCardRef} tabIndex={-1} {...attributes} onClick={handleCardClick} className="relative rounded-lg bg-neutral-700 p-4 shadow-sm hover:shadow-md transition-shadow" style={style}>
       
@@ -175,8 +150,11 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
 
       {/* DRAG HANDLE & IMAGE CONTAINER */}
       <div {...listeners} className="cursor-grab flex flex-col items-center mb-4">
-        <div className="rounded-md overflow-hidden border border-neutral-600 mb-2">
+        <div className="relative rounded-md overflow-hidden border border-neutral-600 mb-2">
           <img src={cardImage} alt="Card graphic" className="w-[200px] h-[200px] object-cover pointer-events-none" />
+          {veteranLogoUrl && (
+          <img src={veteranLogoUrl} alt={`${task.veteranLogo} logo`} className="absolute bottom-2 left-2 h-12 w-12 object-contain"/>
+          )}
         </div>
 
         {/* BUTTON BAR FOR ACTION ITEMS */}
@@ -203,12 +181,16 @@ export function TaskCard({ task, onDelete, onUpdateTask, onSave, onSaveUpdate, s
         <label className="block text-neutral-400 text-xs mb-1 font-semibold">Veteran Status:</label>
         <select 
           value={veteranLogo ?? ""} 
-          onChange={(e) => handleUpdate('veteranLogo', e.target.value === "" ? null : e.target.value)}
+          onChange={(e) => handleUpdate('veteranLogo', e.target.value)}
           className="bg-neutral-800 text-white text-xs rounded p-1.5 w-full border border-neutral-600 focus:outline-none"
         >
-          <option value="">None (Null)</option>
+          <option value="">None</option>
           <option value="US_Army">Army</option>
           <option value="US_Navy">Navy</option>
+          <option value="US_Marine">Marine Corps</option>
+          <option value="US_Coastguard">Coast Guard</option>
+          <option value="US_Airforce">Air Force</option>
+          <option value="US_Spaceforce">Space Force</option>
         </select>
       </div>
 

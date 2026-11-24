@@ -5,5 +5,5 @@ export type Task = {
   name: string;
   title: string;
   details: string[];
-  veteranLogo: string | null;
+  veteranLogo: string;
 };

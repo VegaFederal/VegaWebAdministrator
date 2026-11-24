@@ -35,8 +35,8 @@ Resources:
         Types:
           - REGIONAL
 
-  # Resources: /team-members, /team-members/order, /team-members/{id}
-  # Static "order" has higher priority than {id}.
+  # Resources: /team-members, /team-members/logos, /team-members/order, /team-members/{id}
+  # Static resources have higher priority than {id}.
   TeamMembersResource:
     Type: AWS::ApiGateway::Resource
     Properties:
@@ -50,6 +50,13 @@ Resources:
       RestApiId: !Ref TeamMembersRestApi
       ParentId: !Ref TeamMembersResource
       PathPart: order
+
+  TeamMembersLogosResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      ParentId: !Ref TeamMembersResource
+      PathPart: logos
 
   TeamMembersIdResource:
     Type: AWS::ApiGateway::Resource
@@ -78,6 +85,18 @@ Resources:
       RestApiId: !Ref TeamMembersRestApi
       ResourceId: !Ref TeamMembersResource
       HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TeamMembersFunction.Arn}/invocations
+
+  GetTeamMembersLogosMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref TeamMembersRestApi
+      ResourceId: !Ref TeamMembersLogosResource
+      HttpMethod: GET
       AuthorizationType: NONE
       Integration:
         Type: AWS_PROXY
@@ -127,6 +146,7 @@ Resources:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
       - GetTeamMembersMethod
+      - GetTeamMembersLogosMethod
       - PostTeamMembersMethod
       - PutTeamMembersOrderMethod
       - PutTeamMembersIdMethod
@@ -134,7 +154,7 @@ Resources:
     Properties:
       RestApiId: !Ref TeamMembersRestApi
       #Bump this version if you change a route or add a route.
-      Description: "routes revision 1"
+      Description: "routes revision 2"
 
   TeamMembersRestStage:
     Type: AWS::ApiGateway::Stage

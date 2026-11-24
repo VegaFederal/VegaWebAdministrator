@@ -8,9 +8,12 @@ export function CreateCardModal({
   onUpdateDraft,
   onCancel,
   onSave,
+  veteranLogoUrls = {}
 }) {
   const fileInputRef = useRef(null);
   const cardImage = draft.image || defaultImage;
+
+  const veteranLogoUrl = veteranLogoUrls[draft.veteranLogo] ?? "";
 
   const handleUpdate = (key, value) => {
     onUpdateDraft(key, value);
@@ -61,12 +64,19 @@ export function CreateCardModal({
         </h2>
 
         <div className="mb-4 flex flex-col items-center">
-          <div className="mb-2 overflow-hidden rounded-md border border-neutral-600">
+          <div className="relative mb-2 overflow-hidden rounded-md border border-neutral-600">
             <img
               src={cardImage}
               alt="New card preview"
               className="h-[200px] w-[200px] object-cover"
             />
+            {veteranLogoUrl && (
+              <img
+                src={veteranLogoUrl}
+                alt={`${draft.veteranLogo} logo`}
+                className="absolute bottom-2 left-2 h-12 w-12 object-contain"
+              />
+            )}
           </div>
 
           <button
@@ -91,14 +101,17 @@ export function CreateCardModal({
           <select 
             value={draft.veteranLogo ?? ''}
             onChange={(event) => handleUpdate(
-              'veteranLogo',
-              event.target.value === '' ? null : event.target.value
+              'veteranLogo', event.target.value
             )}
             className="mt-1 w-full rounded-md border-2 border-grayscale-700 bg-grayscale-700 px-2 py-1 text-white shadow-lg outline-none"
             >
-            <option value="">None (Null)</option>
+            <option value="">None</option>
             <option value="US_Army">Army</option>
             <option value="US_Navy">Navy</option>
+            <option value="US_Marine">Marine Corps</option>
+            <option value="US_Coastguard">Coast Guard</option>
+            <option value="US_Airforce">Air Force</option>
+            <option value="US_Spaceforce">Space Force</option>
           </select> 
         </label>
 
