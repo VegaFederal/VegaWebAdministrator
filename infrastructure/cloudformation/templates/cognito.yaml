@@ -82,8 +82,11 @@ Resources:
       Runtime: python3.12
       Role: !GetAtt GroupCheckLambdaRole.Arn
       Handler: index.handler
-      Timeout: 10
-      MemorySize: 256
+      # Cognito waits about 5 seconds for this trigger, so a longer timeout is no use.
+      Timeout: 5
+      # Lambda CPU scales with memory; 1769 MB is one full vCPU. A cold start at
+      # 256 MB took ~4.3 s, too slow for the login function's 5-second limit.
+      MemorySize: 1769
       Environment:
         Variables:
           ALLOWED_GROUP_EMAIL: !Ref AllowedGroupEmail
