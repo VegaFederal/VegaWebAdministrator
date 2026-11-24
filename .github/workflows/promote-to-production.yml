@@ -1,0 +1,99 @@
+name: Promote main to production
+
+# After a branch is merged into main , open a pull
+# request from main to production. Merging that pull request pushes to production,
+# which runs the deploy-production job in main.yml.
+
+on:
+  # Runs after the CI/CD Pipeline finishes, only for a main that deployed
+  # successfully.
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+    branches: [main]
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Handle concurrent merges.
+concurrency:
+  group: promote-to-production
+  cancel-in-progress: false
+
+jobs:
+  open-promotion-pr:
+    name: Open or refresh the main -> production pull request
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open pull request from main to production
+        env:
+          GH_TOKEN: ${{ secrets.PROMOTE_PR_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # The production branch must already exist.
+          if ! gh api "repos/$REPO/branches/production" >/dev/null 2>&1; then
+            echo "::error::The 'production' branch does not exist. Create it from main once, then re-run."
+            exit 1
+          fi
+
+          # Nothing to promote if production already contains everything on main.
+          AHEAD=$(gh api "repos/$REPO/compare/production...main" --jq '.ahead_by')
+          if [ "$AHEAD" = "0" ]; then
+            echo "production is already up to date with main. Nothing to promote."
+            exit 0
+          fi
+
+          # If a pull request is already open, it picks up the new commits on its own
+          # (it tracks the main branch), so there is nothing more to do.
+          EXISTING=$(gh pr list --repo "$REPO" --base production --head main --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            echo "Pull request #$EXISTING (main -> production) is already open and now includes the latest commits."
+            exit 0
+          fi
+
+          # Describe what is being promoted.
+          gh api "repos/$REPO/compare/production...main" \
+            --jq '.commits[] | "- `" + .sha[0:7] + "` " + (.commit.message | split("\n")[0])' \
+            > "$RUNNER_TEMP/commits.txt"
+
+          {
+            echo "Merging this pull request deploys \`main\` to **production**."
+            echo ""
+            echo "### Changes included ($AHEAD commits)"
+            echo ""
+            head -n 50 "$RUNNER_TEMP/commits.txt"
+            if [ "$AHEAD" -gt 50 ]; then
+              echo "- ...and $((AHEAD - 50)) more"
+            fi
+            echo ""
+            echo "### Before you merge"
+            echo "- These changes already deployed successfully on \`main\` (dev)."
+            echo "- Use **Create a merge commit**. Squash or rebase would make \`production\` diverge from \`main\`, and this pull request would keep reappearing with the same commits."
+            echo "- Merging runs the \`deploy-production\` job, which may wait for approval on the \`production\` environment."
+          } > "$RUNNER_TEMP/pr-body.md"
+
+          if ! gh pr create --repo "$REPO" \
+              --base production --head main \
+              --title "Promote main to production" \
+              --body-file "$RUNNER_TEMP/pr-body.md"; then
+            COMPARE_URL="${GITHUB_SERVER_URL:-https://github.com}/$REPO/compare/production...main?expand=1"
+            {
+              echo "### Could not open the pull request automatically"
+              echo ""
+              echo "Open it yourself: $COMPARE_URL"
+              echo ""
+              echo "To have this workflow do it, enable Actions to create pull requests (organization setting first if the box is grayed out), or add a PROMOTE_PR_TOKEN secret. See the comments at the top of this workflow."
+            } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            echo "::error::Could not create the pull request. Open it manually: $COMPARE_URL"
+            exit 1
+          fi
