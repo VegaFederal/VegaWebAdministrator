@@ -768,7 +768,7 @@ jobs:
 
       - name: Set production environment variables
         run: |
-          STACK_NAME="VegaProductionStack"
+          STACK_NAME="VegaAdminStack"
           ENVIRONMENT="production"
           
           echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
