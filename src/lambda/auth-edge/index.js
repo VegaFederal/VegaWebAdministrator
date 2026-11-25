@@ -35,29 +35,50 @@ exports.handler = async (event) => {
   // Derive the callback URL from the host the viewer actually hit. In a
   // viewer-request trigger, request.headers.host carries the distribution
   // (or custom) domain, so one shared function works for every environment.
-  const callbackUrl = deriveCallbackUrl(request);
+  const origin = deriveOrigin(request);
+  const callbackUrl = `${origin}/callback`;
 
-  // callback 
+  // callback
+  //
+  // Every failure here ends on an error page, never a redirect back to the
+  // login page: the user is still signed in to Cognito, so a redirect would
+  // bounce straight back here and loop forever.
   if (uri === '/callback') {
     const params = parseQueryString(request.querystring || '');
+
+    // Cognito reports sign-in failures by redirecting here with ?error=...
+    if (params.error) {
+      console.error('Sign-in returned an error:', safeDecode(params.error),
+        safeDecode(params.error_description || ''));
+      return signInErrorPage(origin);
+    }
+
     const code = params.code;
-    const state = params.state ? decodeURIComponent(params.state) : '/';
-
     if (!code) {
+      // Not a real sign-in response: start a normal login.
       return redirectToCognito(callbackUrl, '/');
+    }
+    const state = params.state ? safeDecode(params.state) : '/';
+
+    let tokens;
+    try {
+      tokens = await exchangeCodeForTokens(code, callbackUrl);
+    } catch (err) {
+      // Most often the group check refused the user, or the group check failed.
+      console.error('Token exchange failed:', err && err.message ? err.message : err);
+      return signInErrorPage(origin);
     }
 
-    try {
-      const tokens = await exchangeCodeForTokens(code, callbackUrl);
-      // Use the id_token as the session cookie.
-      return redirectResponse(state || '/', [
-        `${COOKIE_NAME}=${tokens.id_token}; HttpOnly; Secure; SameSite=Lax; Path=/`,
-      ]);
-    } catch (err) {
-      console.error('Token exchange failed:', err && err.message ? err.message : err);
-      // Exchange failed — Don't display error, send user back to login.
-      return redirectToCognito(callbackUrl, '/');
+    // Check the new token before handing it out. If it would not pass the check
+    // on the next request, setting it would start a login loop.
+    if (!tokens || !tokens.id_token || !(await validateJwt(tokens.id_token))) {
+      console.error('Token exchange returned a token that failed validation.');
+      return signInErrorPage(origin);
     }
+
+    return redirectResponse(safeRedirectPath(state), [
+      `${COOKIE_NAME}=${tokens.id_token}; HttpOnly; Secure; SameSite=Lax; Path=/`,
+    ]);
   }
 
   // non-login path
@@ -77,15 +98,94 @@ exports.handler = async (event) => {
 };
 
 /**
- * Build the OAuth callback URL from the viewer Host header.
- * Falls back safely if the header is somehow absent.
+ * Build https://<host> from the viewer Host header.
  */
-function deriveCallbackUrl(request) {
+function deriveOrigin(request) {
   const hostHeader =
     request.headers && request.headers.host && request.headers.host[0]
       ? request.headers.host[0].value
       : '';
-  return `https://${hostHeader}/callback`;
+  return `https://${hostHeader}`;
+}
+
+/** decodeURIComponent that never throws on malformed input. */
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch (err) {
+    return '';
+  }
+}
+
+/**
+ * Only allow redirects back to a path on this site (e.g. "/team"). Anything
+ * else (an absolute URL, "//other-site", a backslash trick) becomes "/", so the
+ * state parameter can't be used to send a signed-in user to another website.
+ */
+function safeRedirectPath(path) {
+  if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('\\')) {
+    return '/';
+  }
+  return path;
+}
+
+/** Escape text for safe use inside HTML. */
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Page shown when sign-in can't be completed. The sign-out link ends the
+ * Cognito session so the user can try a different Google account.
+ *
+ * Status 401 (not 403) on purpose: this distribution maps 403 responses to the
+ * app's index.html, which would hide this page.
+ */
+function signInErrorPage(origin) {
+  const logoutUrl =
+    `${COGNITO_DOMAIN}/logout` +
+    `?client_id=${encodeURIComponent(APP_CLIENT_ID)}` +
+    `&logout_uri=${encodeURIComponent(`${origin}/`)}`;
+
+  const body = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign-in failed</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; padding: 4rem 1.5rem; color: #1f2937; }
+  main { max-width: 32rem; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 1rem; }
+  p { line-height: 1.5; }
+  a { color: #1d4ed8; }
+</style>
+</head>
+<body>
+<main>
+  <h1>You couldn't be signed in</h1>
+  <p>Your account may not have access to this site, or sign-in couldn't be completed.
+     If you think you should have access, contact the site administrator.</p>
+  <p><a href="${escapeHtml(logoutUrl)}">Sign out and try a different account</a></p>
+</main>
+</body>
+</html>`;
+
+  return {
+    status: '401',
+    statusDescription: 'Unauthorized',
+    headers: {
+      'content-type': [{ key: 'Content-Type', value: 'text/html; charset=utf-8' }],
+      'cache-control': [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }],
+      'set-cookie': [{ key: 'Set-Cookie', value: clearCookieHeader() }],
+    },
+    body,
+  };
 }
 
 //  Helper Function
